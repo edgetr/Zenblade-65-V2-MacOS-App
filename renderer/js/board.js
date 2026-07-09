@@ -2,7 +2,6 @@ import { ROWS } from "./layout.js";
 import {
   keyDisplayColor,
   keyOverrideDisplayColor,
-  lightingSwatchCss,
 } from "./preview.js";
 import { rgbToCss } from "./color.js";
 export function createBoard({ state, onSelect, onPaint } = {}) {
@@ -87,17 +86,6 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
     paintRaf = requestAnimationFrame(() => {
       paintRaf = 0;
       paintRoot($("keyboardBoard"));
-      paintRoot($("lightingBoard"));
-      $("colorSwatch").style.background = lightingSwatchCss(state.lighting);
-      const rgb = keyDisplayColor(state.lighting, {
-        col: 0,
-        row: 0,
-        colCount: 1,
-        rowCount: 1,
-      });
-      $("rgbReadout").textContent = state.lighting.isOn
-        ? `${rgb.r}, ${rgb.g}, ${rgb.b}`
-        : "—";
       onPaint?.();
     });
   }
@@ -126,16 +114,12 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
     });
   }
   render($("keyboardBoard"), true);
-  render($("lightingBoard"));
   $("keyboardBoard").addEventListener("click", (e) => {
     const key = e.target.closest(".key");
     if (key) onSelect?.(key.dataset.code);
   });
   new ResizeObserver(scheduleScale).observe(
     $("keyboardBoard").closest(".board-wrap"),
-  );
-  new ResizeObserver(scheduleScale).observe(
-    $("lightingBoard").closest(".board-wrap"),
   );
   scaleAll();
   return { paint, scheduleScale };

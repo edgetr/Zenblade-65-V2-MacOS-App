@@ -4,10 +4,23 @@ import { createModel } from "../renderer/js/state.js";
 import { normalizeStore } from "../renderer/js/store.js";
 import { keyDisplayColor } from "../renderer/js/preview.js";
 import { uiAccentFromLighting } from "../renderer/js/theme.js";
-import { colorUiForMode } from "../renderer/js/lighting-ui.js";
+import { colorUiForMode, lightingColorUpdate } from "../renderer/js/lighting-ui.js";
 import { DeviceOperationGate } from "../renderer/js/device-ops.js";
-import { pickZenbladeDevice } from "../renderer/js/protocol.js";
-import { rgbToHsv } from "../renderer/js/color.js";
+import {
+  normalizeLighting,
+  pctFromWire,
+  pctToWire,
+  pickZenbladeDevice,
+  responseMatchesCommand,
+  ZenbladeDevice,
+} from "../renderer/js/protocol.js";
+import { hexToRgb, rgbToHsv } from "../renderer/js/color.js";
+import {
+  categorySelectionState,
+  LIGHT_MODES,
+  modesForCategory,
+} from "../renderer/js/lighting-modes.js";
+import { effectPreviewKind, effectPreviewSamples } from "../renderer/js/lighting-preview.js";
 
 const codes = { KeyA: 0 };
 const memory = () => { let value = null; return { getItem: () => value, setItem: (_, next) => { value = next; } }; };
@@ -63,4 +76,95 @@ test("preview recipes retain mode-specific saturation floors", () => {
     const rgb = keyDisplayColor({ ...base, mode }, pos);
     assert.ok(rgbToHsv(rgb.r, rgb.g, rgb.b).s >= minimum - 1, `mode ${mode}`);
   }
+});
+test("lighting is normalized at the model boundary before persistence", () => {
+  const model = createModel({ storage: memory(), validCodes: codes });
+  model.setLighting({
+    isOn: "not a boolean",
+    mode: 99,
+    brightness: -1,
+    speed: 101,
+    hue: 360,
+    saturation: -5,
+  });
+  assert.deepEqual(model.state.lighting, {
+    isOn: true,
+    mode: 44,
+    brightness: 0,
+    speed: 100,
+    hue: 359,
+    saturation: 0,
+  });
+  assert.deepEqual(
+    normalizeLighting({ isOn: false, mode: -3 }, model.state.lighting),
+    { ...model.state.lighting, isOn: false, mode: 1 },
+  );
+  assert.deepEqual(
+    normalizeLighting({ isOn: true, mode: 0 }, model.state.lighting),
+    { ...model.state.lighting, isOn: true, mode: 1 },
+  );
+});
+test("brightness wire packing and read conversion preserve edge percentages", async () => {
+  const device = new ZenbladeDevice();
+  const packets = [];
+  device.execute = async (command) => { packets.push([...command]); };
+  for (const brightness of [0, 1, 50, 99, 100]) {
+    packets.length = 0;
+    await device.writeLighting({ isOn: true, mode: 1, brightness, speed: 50, hue: 0, saturation: 100 });
+    const brightnessPackets = packets.filter((packet) => packet[1] === 3 && packet[2] === 1);
+    assert.deepEqual(brightnessPackets.map((packet) => packet[3]), [pctToWire(brightness), pctToWire(brightness)]);
+    assert.equal(pctFromWire(pctToWire(brightness)), brightness);
+  }
+});
+test("HID response matching never accepts a rich command by its first byte", () => {
+  assert.equal(responseMatchesCommand(Uint8Array.from([8, 3, 2, 99]), Uint8Array.from([8, 3, 2])), true);
+  assert.equal(responseMatchesCommand(Uint8Array.from([8, 3, 1, 99]), Uint8Array.from([8, 3, 2])), false);
+  assert.equal(responseMatchesCommand(Uint8Array.from([8]), Uint8Array.from([8, 3, 2]), 1), false);
+  assert.equal(responseMatchesCommand(Uint8Array.from([34]), Uint8Array.from([34]), 1), true);
+});
+test("effect categories retain every firmware effect and filter without duplicates", () => {
+  const ids = modesForCategory("All").map((mode) => mode.id);
+  assert.equal(new Set(ids).size, LIGHT_MODES.length);
+  assert.deepEqual(
+    modesForCategory("Reactive").map((mode) => mode.id),
+    LIGHT_MODES.filter((mode) => mode.category === "Reactive").map((mode) => mode.id),
+  );
+});
+test("category filters preserve an off-filter selection with a usable tab stop", () => {
+  const state = categorySelectionState("Static", 3);
+  assert.equal(state.selectedVisible, false);
+  assert.equal(state.tabStopId, 1);
+  assert.equal(state.modes.some((mode) => mode.id === 3), false);
+  assert.equal(categorySelectionState("Gradient", 3).tabStopId, 3);
+});
+test("effect preview samples the selected pattern instead of a single solid swatch", () => {
+  const gradient = { isOn: true, mode: 3, brightness: 100, hue: 12, saturation: 100 };
+  const samples = effectPreviewSamples(gradient);
+  assert.notDeepEqual(samples[0], samples[samples.length - 1]);
+  assert.notDeepEqual(samples, effectPreviewSamples({ ...gradient, hue: 180 }));
+  assert.equal(effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 1)), "Base RGB");
+  assert.equal(effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 2)), "Effect preview");
+  assert.equal(effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 3)), "Effect preview");
+  assert.equal(effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 13)), "Effect preview");
+});
+test("advanced HEX color input accepts only the documented six-digit format", () => {
+  assert.deepEqual(hexToRgb("#FF00AA"), { r: 255, g: 0, b: 170 });
+  assert.equal(hexToRgb("#FF00AA80"), null);
+});
+test("color picker mappings preserve HSV value through lighting brightness", () => {
+  assert.deepEqual(lightingColorUpdate({ r: 0, g: 0, b: 0 }), {
+    hue: 0,
+    saturation: 0,
+    brightness: 0,
+  });
+  assert.deepEqual(lightingColorUpdate({ r: 128, g: 128, b: 128 }), {
+    hue: 0,
+    saturation: 0,
+    brightness: 50,
+  });
+  assert.deepEqual(lightingColorUpdate({ r: 64, g: 32, b: 16 }), {
+    hue: 20,
+    saturation: 75,
+    brightness: 25,
+  });
 });

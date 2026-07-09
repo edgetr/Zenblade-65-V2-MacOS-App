@@ -1,7 +1,28 @@
 export const VID = 0x3662,
   PIDS = [0x1001, 0x1002],
   PROFILE_COUNT = 3,
-  KEY_COUNT = 67;
+  KEY_COUNT = 67,
+  LIGHT_MODE_MAX = 44;
+const finite = (value, fallback) =>
+  Number.isFinite(Number(value)) ? Number(value) : fallback;
+const boundedInteger = (value, low, high, fallback) =>
+  Math.round(Math.max(low, Math.min(high, finite(value, fallback))));
+
+// Keep lighting values safe at both application and device boundaries. The
+// application always holds a firmware effect from 1–44; only isOn:false emits
+// the wire-level zero value that disables keyboard lighting.
+export function normalizeLighting(lighting = {}, fallback = {}) {
+  return {
+    isOn: typeof lighting.isOn === "boolean"
+      ? lighting.isOn
+      : (typeof fallback.isOn === "boolean" ? fallback.isOn : true),
+    mode: boundedInteger(lighting.mode, 1, LIGHT_MODE_MAX, fallback.mode ?? 1),
+    brightness: boundedInteger(lighting.brightness, 0, 100, fallback.brightness ?? 80),
+    speed: boundedInteger(lighting.speed, 0, 100, fallback.speed ?? 50),
+    hue: boundedInteger(lighting.hue, 0, 359, fallback.hue ?? 0),
+    saturation: boundedInteger(lighting.saturation, 0, 100, fallback.saturation ?? 100),
+  };
+}
 export const HID_FILTERS = PIDS.flatMap((
   productId,
 ) => [{ vendorId: VID, productId, usagePage: 0xff01, usage: 1 }, {
@@ -42,6 +63,17 @@ const pad = (cmd) => {
     return out;
   },
   same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+// Rich command IDs must match their complete prefix. Some older firmware
+// replies to one-byte commands with only the command byte; that compatibility
+// path is safe only for commands whose ID itself is one byte long.
+export function responseMatchesCommand(bytes, id, reportedLength = bytes.length) {
+  if (!bytes?.length || !id?.length || bytes[0] !== id[0]) return false;
+  if (bytes.length >= id.length && same([...bytes.slice(0, id.length)], [...id])) {
+    return true;
+  }
+  return id.length === 1 && reportedLength === 1;
+}
 export class ZenbladeDevice {
   constructor() {
     this.device = null;
@@ -110,13 +142,18 @@ export class ZenbladeDevice {
     this._emit("disconnected");
   }
   _onInput(event) {
-    const bytes = new Uint8Array(event.data.buffer);
-    if (bytes[0] === 255) this._emit("error", "Device error packet");
+    const bytes = new Uint8Array(
+      event.data.buffer,
+      event.data.byteOffset,
+      event.data.byteLength,
+    );
+    if (bytes[0] === 255) {
+      this._emit("error", "Device error packet");
+      return;
+    }
     const item = this._queue[0];
     if (!item) return;
-    const matches = bytes.length >= item.id.length &&
-      same([...bytes.slice(0, item.id.length)], [...item.id]);
-    if (!matches && bytes[0] !== item.id[0]) return;
+    if (!responseMatchesCommand(bytes, item.id, event.data.byteLength)) return;
     clearTimeout(item.timer);
     this._queue.shift();
     this._busy = false;
@@ -160,27 +197,29 @@ export class ZenbladeDevice {
       s = (await this.execute([8, 3, 3], 3))[0] ?? 128,
       c = await this.execute([8, 3, 4], 3),
       color = colorFromWire(c[0] ?? 0, c[1] ?? 255);
-    return {
+    return normalizeLighting({
       isOn: mode !== 0,
       mode: mode || 1,
       brightness: pctFromWire(b),
       speed: pctFromWire(s),
       ...color,
-    };
+    });
   }
   async writeLighting(l) {
     // Zenblade firmware accepts both legacy (7) and current (9) lighting
     // command families. Sending the paired writes keeps v1/v2 and v3 boards
     // in sync; do not collapse these without firmware compatibility testing.
-    const w = colorToWire(l.hue, l.saturation), mode = l.isOn ? l.mode : 0;
+    const lighting = normalizeLighting(l);
+    const w = colorToWire(lighting.hue, lighting.saturation),
+      mode = lighting.isOn ? lighting.mode : 0;
     for (
       const cmd of [
         [7, 3, 2, mode],
         [9, 3, 2, mode],
-        [7, 3, 1, pctToWire(l.brightness)],
-        [9, 3, 1, pctToWire(l.brightness)],
-        [7, 3, 3, pctToWire(l.speed)],
-        [9, 3, 3, pctToWire(l.speed)],
+        [7, 3, 1, pctToWire(lighting.brightness)],
+        [9, 3, 1, pctToWire(lighting.brightness)],
+        [7, 3, 3, pctToWire(lighting.speed)],
+        [9, 3, 3, pctToWire(lighting.speed)],
         [7, 3, 4, w.hue, w.saturation],
         [9, 3, 4, w.hue, w.saturation],
       ]

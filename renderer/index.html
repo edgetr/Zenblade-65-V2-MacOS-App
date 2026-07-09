@@ -167,7 +167,10 @@
                     <span>On</span>
                   </label>
                 </div>
+                <div class="mode-categories" id="modeCategories"></div>
                 <div class="mode-grid" id="modeGrid"></div>
+                <p class="mode-filter-note" id="modeFilterNotice" hidden></p>
+                <p class="sr-only" id="effectSelectionStatus" aria-live="polite"></p>
               </div>
               <div class="stack">
                 <div class="card">
@@ -183,30 +186,17 @@
                   </div>
 
                   <div id="simpleColorControls">
-                    <div class="field" id="fieldHue">
-                      <label for="lightHue">Hue <output id="outHue">0</output></label>
-                      <button type="button" class="help-tip" data-help="Base color on the color wheel (0–359)." aria-label="Help: Hue">?</button>
-                      <input type="range" id="lightHue" aria-label="Hue" min="0" max="359" value="0" />
-                    </div>
-                    <div class="field" id="fieldSat">
-                      <label for="lightSat">Sat <output id="outSat">100</output></label>
-                      <button type="button" class="help-tip" data-help="How vivid the color is. Lower looks more gray." aria-label="Help: Sat">?</button>
-                      <input type="range" id="lightSat" aria-label="Saturation" min="0" max="100" value="100" />
-                    </div>
                     <div class="color-row" id="fieldColor">
-                      <label class="sr-only" for="lightColorPicker">Color</label>
+                      <label for="lightColorPicker">Base color</label>
                       <input type="color" id="lightColorPicker" value="#ff0000" />
-                      <div class="color-swatch" id="colorSwatch"></div>
-                      <span class="mono" id="rgbReadout" aria-live="polite">—</span>
-                      <button type="button" class="btn btn--ghost btn--sm" id="btnToggleAdvancedColor">Advanced</button>
+                      <span class="mono" id="simpleColorReadout" aria-live="polite">Base RGB #FF0000</span>
                     </div>
                   </div>
+                  <p class="color-unavailable" id="colorUnavailable" hidden></p>
+                  <button type="button" class="btn btn--ghost btn--sm color-advanced-toggle" id="btnToggleAdvancedColor" aria-controls="advancedColor" aria-expanded="false">Advanced…</button>
 
                   <div class="advanced-color" id="advancedColor" hidden>
-                    <div class="advanced-color__head">
-                      <span class="card__title" style="margin:0">Color Wheel</span>
-                      <button type="button" class="btn btn--ghost btn--sm" id="btnToggleAdvancedColorClose">Simple</button>
-                    </div>
+                    <span class="card__title">Color wheel</span>
                     <div class="advanced-color__wheel-wrap">
                       <canvas id="colorWheel" width="200" height="200" tabindex="0" role="slider" aria-label="Color wheel" aria-valuemin="0" aria-valuemax="359" aria-describedby="colorWheelHelp"></canvas>
                       <span class="sr-only" id="colorWheelHelp">Use arrow keys to change hue. Hold Shift with arrow keys to change saturation.</span>
@@ -215,31 +205,23 @@
                       <div class="field field--inline">
                         <label for="inputHex">
                           HEX
-                          <button type="button" class="help-tip" data-help="Exact color as a hex code, for example #FF0000. Alpha is ignored if you paste #RRGGBBAA." aria-label="Help: HEX">?</button>
+                          <button type="button" class="help-tip" data-help="Exact base color as a six-digit HEX code, for example #FF0000." aria-label="Help: HEX">?</button>
                         </label>
-                        <input type="text" class="text-input text-input--mono" id="inputHex" maxlength="9" placeholder="#RRGGBB" spellcheck="false" />
+                        <input type="text" class="text-input text-input--mono" id="inputHex" maxlength="7" placeholder="#RRGGBB" spellcheck="false" />
                       </div>
-                      <div class="field field--inline">
-                        <label for="inputRgb">
-                          RGB
-                          <button type="button" class="help-tip" data-help="Red, green, and blue channels from 0 to 255, for example 255, 0, 0." aria-label="Help: RGB">?</button>
-                        </label>
-                        <input type="text" class="text-input text-input--mono" id="inputRgb" placeholder="255, 0, 0" spellcheck="false" />
-                      </div>
-                      <div class="field field--inline">
-                        <label for="inputHsl">
-                          HSL
-                          <button type="button" class="help-tip" data-help="Hue, saturation %, and lightness %, for example 0, 100%, 50%." aria-label="Help: HSL">?</button>
-                        </label>
-                        <input type="text" class="text-input text-input--mono" id="inputHsl" placeholder="0, 100%, 50%" spellcheck="false" />
-                      </div>
+                      <dl class="color-derived" aria-label="Derived color values">
+                        <div><dt>RGB</dt><dd class="mono" id="rgbValue">255, 0, 0</dd></div>
+                        <div><dt>HSL</dt><dd class="mono" id="hslValue">0, 100%, 50%</dd></div>
+                      </dl>
                     </div>
                   </div>
                 </div>
-                <div class="card board-card">
-                  <div class="board-wrap board-wrap--premium">
-                    <div class="board" id="lightingBoard"></div>
+                <div class="card effect-preview-card">
+                  <div class="card-toolbar">
+                    <h3 class="card__title" id="effectPreviewLabel">Effect preview</h3>
+                    <span class="mono">Live</span>
                   </div>
+                  <div class="effect-preview" id="effectPreview" role="img" aria-labelledby="effectPreviewLabel"></div>
                 </div>
               </div>
             </div>

@@ -1,212 +1,299 @@
-import { LIGHT_MODES } from "./lighting-modes.js";
 import {
-  clamp,
-  hexToRgb,
-  hslToRgb,
-  hsvToRgb,
-  rgbToHex,
-  rgbToHsl,
-  rgbToHsv,
-} from "./color.js";
-import { keyDisplayColor } from "./preview.js";
+  categorySelectionState,
+  LIGHT_CATEGORIES,
+  LIGHT_MODES,
+} from "./lighting-modes.js";
+import { clamp, hexToRgb, hsvToRgb, rgbToHex, rgbToHsl, rgbToHsv } from "./color.js";
+import { effectPreviewKind, paintEffectPreview } from "./lighting-preview.js";
+
 export const colorUiForMode = (hasColor, colorUi) =>
   hasColor && colorUi === "hidden" ? "simple" : colorUi;
+
+export const lightingColorUpdate = (rgb) => {
+  const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+  return { hue: hsv.h, saturation: hsv.s, brightness: hsv.v };
+};
+
 export function createLightingUi({ model, paint, toast }) {
-  const { state, setLighting } = model,
-    $ = (id) => document.getElementById(id),
-    grid = $("modeGrid"),
-    wheel = $("colorWheel"),
-    ctx = wheel?.getContext("2d");
-  let dragging = false, wheelImage = null;
-  LIGHT_MODES.forEach((m) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "mode-chip";
-    b.dataset.mode = m.id;
-    b.textContent = m.name;
-    b.title = m.name;
-    grid.append(b);
-  });
-  const hasColor = () =>
-    (LIGHT_MODES.find((m) => m.id === state.lighting.mode)?.params || [])
-      .includes("color");
-  function visibility() {
-    const params =
-      LIGHT_MODES.find((m) => m.id === state.lighting.mode)?.params || [];
-    [
-      ["fieldBright", "brightness"],
-      ["fieldSpeed", "speed"],
-      ["fieldHue", "color"],
-      ["fieldSat", "color"],
-      ["fieldColor", "color"],
-    ].forEach(([id, param]) => $(id).hidden = !params.includes(param));
-    if (!hasColor()) state.colorUi = "hidden";
-    // A colorless mode intentionally hides color UI, but it must not leave the
-    // next color-capable mode without a way back to the simple/advanced picker.
-    state.colorUi = colorUiForMode(hasColor(), state.colorUi);
-    $("advancedColor").hidden = state.colorUi !== "advanced";
-    $("simpleColorControls").hidden = state.colorUi !== "simple";
-    $("btnToggleAdvancedColor").textContent = state.colorUi === "advanced"
-      ? "Simple"
-      : "Advanced";
+  const { state, setLighting } = model;
+  const $ = (id) => document.getElementById(id);
+  const grid = $("modeGrid");
+  const categoryGrid = $("modeCategories");
+  const wheel = $("colorWheel");
+  const ctx = wheel?.getContext("2d");
+  let category = "All";
+  let dragging = false;
+  let wheelImage = null;
+  let paintFrame = 0;
+
+  const currentMode = () =>
+    LIGHT_MODES.find((mode) => mode.id === state.lighting.mode) || LIGHT_MODES[0];
+  const allowsBaseColor = () => currentMode().params.includes("color");
+  const schedulePaint = () => {
+    if (paintFrame) return;
+    paintFrame = requestAnimationFrame(() => {
+      paintFrame = 0;
+      paint();
+    });
+  };
+  const announce = (message) => {
+    $("effectSelectionStatus").textContent = message;
+  };
+  const setRangeProgress = (input, value) => {
+    const min = Number(input.min) || 0;
+    const max = Number(input.max) || 100;
+    input.style.setProperty("--range-progress", `${(Number(value) - min) / (max - min) * 100}%`);
+  };
+
+  function renderCategories() {
+    categoryGrid.innerHTML = "";
+    categoryGrid.setAttribute("role", "group");
+    categoryGrid.setAttribute("aria-label", "Effect category");
+    LIGHT_CATEGORIES.forEach((name) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mode-category";
+      button.textContent = name;
+      button.dataset.category = name;
+      button.setAttribute("aria-pressed", "false");
+      categoryGrid.append(button);
+    });
   }
-  function draw() {
+  function renderModes() {
+    grid.innerHTML = "";
+    grid.setAttribute("role", "radiogroup");
+    grid.setAttribute("aria-label", "Lighting effect");
+    const selection = categorySelectionState(category, state.lighting.mode);
+    if (!selection.selectedVisible) {
+      const selected = currentMode();
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mode-chip mode-chip--selected-outside";
+      button.dataset.mode = selected.id;
+      button.textContent = `Selected: ${selected.name}`;
+      button.disabled = true;
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", "true");
+      button.setAttribute("aria-label", `Selected effect: ${selected.name}. Not shown by the ${category} filter.`);
+      grid.append(button);
+    }
+    selection.modes.forEach((mode) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mode-chip";
+      button.dataset.mode = mode.id;
+      button.textContent = mode.name;
+      button.title = `${mode.category}: ${mode.name}`;
+      button.setAttribute("role", "radio");
+      grid.append(button);
+    });
+  }
+  function drawWheel() {
     if (!wheel || !ctx) return;
-    const size = wheel.width,
-      c = size / 2,
-      r = c - 2,
-      img = wheelImage || ctx.createImageData(size, size);
+    const size = wheel.width;
+    const center = size / 2;
+    const radius = center - 2;
+    const image = wheelImage || ctx.createImageData(size, size);
     if (!wheelImage) {
       for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
-          const dx = x - c,
-            dy = y - c,
-            d = Math.hypot(dx, dy),
-            i = (y * size + x) * 4;
-          if (d <= r) {
-            const color = hsvToRgb(
+          const dx = x - center;
+          const dy = y - center;
+          const distance = Math.hypot(dx, dy);
+          const index = (y * size + x) * 4;
+          if (distance <= radius) {
+            const rgb = hsvToRgb(
               (Math.atan2(dy, dx) * 180 + 360) % 360,
-              d / r * 100,
+              distance / radius * 100,
               100,
             );
-            img.data.set([color.r, color.g, color.b, 255], i);
+            image.data.set([rgb.r, rgb.g, rgb.b, 255], index);
           }
         }
       }
-      wheelImage = img;
+      wheelImage = image;
     }
-    ctx.putImageData(img, 0, 0);
-    const rad = state.lighting.hue * Math.PI / 180,
-      d = state.lighting.saturation / 100 * r;
+    ctx.putImageData(image, 0, 0);
+    const angle = state.lighting.hue * Math.PI / 180;
+    const distance = state.lighting.saturation / 100 * radius;
     ctx.beginPath();
-    ctx.arc(c + Math.cos(rad) * d, c + Math.sin(rad) * d, 7, 0, Math.PI * 2);
+    ctx.arc(
+      center + Math.cos(angle) * distance,
+      center + Math.sin(angle) * distance,
+      7,
+      0,
+      Math.PI * 2,
+    );
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 3;
     ctx.stroke();
   }
+  function visibility() {
+    const mode = currentMode();
+    const params = mode.params;
+    $("fieldBright").hidden = !params.includes("brightness");
+    $("fieldSpeed").hidden = !params.includes("speed");
+    const canEditColor = allowsBaseColor();
+    state.colorUi = colorUiForMode(canEditColor, state.colorUi);
+    if (!canEditColor) state.colorUi = "hidden";
+    const advanced = canEditColor && state.colorUi === "advanced";
+    $("simpleColorControls").hidden = !canEditColor || advanced;
+    $("advancedColor").hidden = !advanced;
+    $("btnToggleAdvancedColor").hidden = !canEditColor;
+    $("btnToggleAdvancedColor").textContent = advanced ? "Simple view" : "Advanced…";
+    $("btnToggleAdvancedColor").setAttribute("aria-expanded", String(advanced));
+    $("colorUnavailable").hidden = canEditColor;
+    $("colorUnavailable").textContent = "Effect preview uses the firmware’s multi-color palette.";
+  }
   function sync() {
-    const L = state.lighting;
-    $("lightOn").checked = L.isOn;
-    [
-      ["lightBright", "outBright", "brightness"],
-      ["lightSpeed", "outSpeed", "speed"],
-      ["lightHue", "outHue", "hue"],
-      ["lightSat", "outSat", "saturation"],
-    ].forEach(([input, out, key]) => {
-      $(input).value = L[key];
-      $(out).textContent = L[key];
+    const lighting = state.lighting;
+    const mode = currentMode();
+    const categoryState = categorySelectionState(category, lighting.mode);
+    $("lightOn").checked = lighting.isOn;
+    [["lightBright", "outBright", "brightness"], ["lightSpeed", "outSpeed", "speed"]]
+      .forEach(([inputId, outputId, key]) => {
+        const input = $(inputId);
+        input.value = lighting[key];
+        setRangeProgress(input, lighting[key]);
+        $(outputId).textContent = lighting[key];
+      });
+    categoryGrid.querySelectorAll(".mode-category").forEach((button) => {
+      const active = button.dataset.category === category;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
     });
-    grid.querySelectorAll(".mode-chip").forEach((b) =>
-      {
-        const active = +b.dataset.mode === L.mode;
-        b.classList.toggle("is-active", active);
-        b.setAttribute("aria-pressed", String(active));
-      }
+    grid.querySelectorAll(".mode-chip").forEach((button) => {
+      const active = Number(button.dataset.mode) === lighting.mode;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-checked", String(active));
+      button.tabIndex = Number(button.dataset.mode) === categoryState.tabStopId ? 0 : -1;
+    });
+    const filterNotice = $("modeFilterNotice");
+    filterNotice.hidden = categoryState.selectedVisible;
+    filterNotice.textContent = categoryState.selectedVisible
+      ? ""
+      : `Selected: ${mode.name}. Showing ${category} effects.`;
+    const baseRgb = hsvToRgb(
+      lighting.hue,
+      lighting.saturation,
+      lighting.brightness,
     );
-    const rgb = keyDisplayColor(
-      { ...L, mode: 1, isOn: true, brightness: 100 },
-      { col: 0, row: 0, colCount: 1, rowCount: 1 },
-    );
+    const baseHex = rgbToHex(baseRgb).toUpperCase();
     if (document.activeElement !== $("lightColorPicker")) {
-      $("lightColorPicker").value = rgbToHex(rgb);
+      $("lightColorPicker").value = baseHex;
     }
-    if (document.activeElement !== $("inputHex")) {
-      $("inputHex").value = rgbToHex(rgb);
-    }
-    if (document.activeElement !== $("inputRgb")) {
-      $("inputRgb").value = `${rgb.r}, ${rgb.g}, ${rgb.b}`;
-    }
-    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
-    if (document.activeElement !== $("inputHsl")) {
-      $("inputHsl").value = `${hsl.h}, ${hsl.s}%, ${hsl.l}%`;
-    }
+    if (document.activeElement !== $("inputHex")) $("inputHex").value = baseHex;
+    const hsl = rgbToHsl(baseRgb.r, baseRgb.g, baseRgb.b);
+    $("rgbValue").textContent = `${baseRgb.r}, ${baseRgb.g}, ${baseRgb.b}`;
+    $("hslValue").textContent = `${hsl.h}, ${hsl.s}%, ${hsl.l}%`;
+    $("simpleColorReadout").textContent = `Base color ${baseHex}`;
+    $("effectPreviewLabel").textContent = effectPreviewKind(mode);
+    paintEffectPreview($("effectPreview"), lighting, mode);
     visibility();
-    if (state.colorUi === "advanced") draw();
+    if (state.colorUi === "advanced") drawWheel();
     if (wheel) {
-      wheel.setAttribute("aria-valuenow", String(L.hue));
-      wheel.setAttribute("aria-valuetext", `Hue ${L.hue}, saturation ${L.saturation}%`);
+      wheel.setAttribute("aria-valuenow", String(lighting.hue));
+      wheel.setAttribute("aria-valuetext", `Hue ${lighting.hue}, saturation ${lighting.saturation}%`);
     }
   }
-  const update = (part) => {
-    setLighting(part);
+  const update = (partial) => {
+    setLighting(partial);
     sync();
-    paint();
+    schedulePaint();
   };
-  grid.addEventListener("click", (e) => {
-    const b = e.target.closest(".mode-chip");
-    if (b) update({ mode: +b.dataset.mode });
+  const chooseMode = (id, focus = false) => {
+    const selected = LIGHT_MODES.find((mode) => mode.id === id);
+    if (!selected) return;
+    update({ mode: selected.id });
+    announce(`Selected ${selected.name}.`);
+    if (focus) grid.querySelector(`[data-mode="${selected.id}"]`)?.focus();
+  };
+  const moveRadio = (event, selector, choose) => {
+    const items = [...event.currentTarget.querySelectorAll(selector)];
+    const current = items.indexOf(document.activeElement);
+    if (!items.length || current < 0) return;
+    const delta = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1
+      : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1
+      : 0;
+    let next = current;
+    if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = items.length - 1;
+    else if (delta) next = (current + delta + items.length) % items.length;
+    else return;
+    event.preventDefault();
+    choose(items[next]);
+  };
+
+  renderCategories();
+  renderModes();
+  categoryGrid.addEventListener("click", (event) => {
+    const button = event.target.closest(".mode-category");
+    if (!button) return;
+    category = button.dataset.category;
+    renderModes();
+    sync();
+    announce(`${category} effects. ${currentMode().name} remains selected.`);
   });
-  [
-    ["lightBright", "brightness"],
-    ["lightSpeed", "speed"],
-    ["lightHue", "hue"],
-    ["lightSat", "saturation"],
-  ].forEach(([id, key]) =>
-    $(id).addEventListener("input", (e) => update({ [key]: +e.target.value }))
+  categoryGrid.addEventListener("keydown", (event) => moveRadio(event, ".mode-category", (button) => {
+    category = button.dataset.category;
+    renderModes();
+    sync();
+    announce(`${category} effects. ${currentMode().name} remains selected.`);
+    categoryGrid.querySelector(`[data-category="${category}"]`)?.focus();
+  }));
+  grid.addEventListener("click", (event) => {
+    const button = event.target.closest(".mode-chip");
+    if (button) chooseMode(Number(button.dataset.mode));
+  });
+  grid.addEventListener("keydown", (event) => moveRadio(event, ".mode-chip:not(:disabled)", (button) => chooseMode(Number(button.dataset.mode), true)));
+  [["lightBright", "brightness"], ["lightSpeed", "speed"]].forEach(([id, key]) =>
+    $(id).addEventListener("input", (event) => update({ [key]: Number(event.target.value) }))
   );
-  $("lightOn").addEventListener(
-    "change",
-    (e) => update({ isOn: e.target.checked }),
-  );
-  function color(rgb) {
-    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-    update({ hue: hsv.h, saturation: hsv.s });
-  }
-  $("lightColorPicker").addEventListener("input", (e) => {
-    const rgb = hexToRgb(e.target.value);
-    if (rgb) color(rgb);
+  $("lightOn").addEventListener("change", (event) => update({ isOn: event.target.checked }));
+  const setColor = (rgb) => {
+    update(lightingColorUpdate(rgb));
+  };
+  $("lightColorPicker").addEventListener("input", (event) => {
+    const rgb = hexToRgb(event.target.value);
+    if (rgb) setColor(rgb);
   });
   $("btnToggleAdvancedColor").addEventListener("click", () => {
-    state.colorUi = state.colorUi === "advanced" ? "simple" : "advanced";
+    const wasAdvanced = state.colorUi === "advanced";
+    state.colorUi = wasAdvanced ? "simple" : "advanced";
     sync();
+    if (wasAdvanced) $("btnToggleAdvancedColor").focus();
+    else wheel?.focus();
   });
-  $("btnToggleAdvancedColorClose").addEventListener("click", () => {
-    state.colorUi = "simple";
-    sync();
+  const applyHex = () => {
+    const input = $("inputHex");
+    const rgb = hexToRgb(input.value);
+    input.classList.toggle("is-invalid", !rgb);
+    input.setAttribute("aria-invalid", String(!rgb));
+    if (rgb) setColor(rgb);
+    else toast("Enter a valid HEX color", "error");
+  };
+  $("inputHex").addEventListener("change", applyHex);
+  $("inputHex").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") applyHex();
   });
-  [["inputHex", (v) => hexToRgb(v)], ["inputRgb", (v) => {
-    const a = v.match(/\d+/g);
-    return a?.length >= 3
-      ? {
-        r: clamp(a[0], 0, 255),
-        g: clamp(a[1], 0, 255),
-        b: clamp(a[2], 0, 255),
-      }
-      : null;
-  }], ["inputHsl", (v) => {
-    const a = v.match(/[\d.]+/g);
-    return a?.length >= 3 ? hslToRgb(a[0], a[1], a[2]) : null;
-  }]].forEach(([id, parse]) => {
-    const el = $(id),
-      apply = () => {
-        const rgb = parse(el.value);
-        el.classList.toggle("is-invalid", !rgb);
-        el.setAttribute("aria-invalid", String(!rgb));
-        if (rgb) color(rgb);
-        else toast(`Invalid ${id.replace("input", "")}`, "error");
-      };
-    el.addEventListener("change", apply);
-    el.addEventListener("keydown", (e) => e.key === "Enter" && apply());
-  });
-  function wheelEvent(e) {
-    const rect = wheel.getBoundingClientRect(),
-      x = (e.clientX - rect.left) * wheel.width / rect.width - wheel.width / 2,
-      y = (e.clientY - rect.top) * wheel.height / rect.height -
-        wheel.height / 2,
-      r = wheel.width / 2 - 2,
-      d = Math.min(r, Math.hypot(x, y));
+  function wheelEvent(event) {
+    const rect = wheel.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * wheel.width / rect.width - wheel.width / 2;
+    const y = (event.clientY - rect.top) * wheel.height / rect.height - wheel.height / 2;
+    const radius = wheel.width / 2 - 2;
+    const distance = Math.min(radius, Math.hypot(x, y));
     update({
       hue: Math.round((Math.atan2(y, x) * 180 + 360) % 360),
-      saturation: Math.round(d / r * 100),
+      saturation: Math.round(distance / radius * 100),
     });
   }
   if (wheel) {
-    wheel.addEventListener("pointerdown", (e) => {
+    wheel.addEventListener("pointerdown", (event) => {
       dragging = true;
-      wheel.setPointerCapture(e.pointerId);
-      wheelEvent(e);
+      wheel.setPointerCapture(event.pointerId);
+      wheelEvent(event);
     });
-    wheel.addEventListener("pointermove", (e) => dragging && wheelEvent(e));
+    wheel.addEventListener("pointermove", (event) => dragging && wheelEvent(event));
     wheel.addEventListener("pointerup", () => dragging = false);
     wheel.addEventListener("pointercancel", () => dragging = false);
     wheel.addEventListener("keydown", (event) => {
@@ -214,8 +301,7 @@ export function createLightingUi({ model, paint, toast }) {
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
         update({ hue: (state.lighting.hue + (event.key === "ArrowRight" ? delta : -delta) + 360) % 360 });
-      }
-      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
         event.preventDefault();
         update({ saturation: clamp(state.lighting.saturation + (event.key === "ArrowUp" ? delta : -delta), 0, 100) });
       }

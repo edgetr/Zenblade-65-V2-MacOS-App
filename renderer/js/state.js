@@ -5,7 +5,7 @@ import {
   loadStore,
   saveStore,
 } from "./store.js";
-import { PROFILE_COUNT } from "./protocol.js";
+import { normalizeLighting, PROFILE_COUNT } from "./protocol.js";
 export { deepClone } from "./store.js";
 export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
   const store = loadStore(storage, validCodes),
@@ -44,7 +44,7 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     immediate ? write() : timer = setTimeout(write, debounceMs);
   };
   const setLighting = (partial, { persist: shouldPersist = true } = {}) => {
-    Object.assign(state.lighting, partial);
+    state.lighting = normalizeLighting(partial, state.lighting);
     if (shouldPersist) persist();
     return state.lighting;
   };

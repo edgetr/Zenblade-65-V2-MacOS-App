@@ -1,4 +1,4 @@
-import { PROFILE_COUNT } from "./protocol.js";
+import { normalizeLighting, PROFILE_COUNT } from "./protocol.js";
 import { clamp } from "./color.js";
 export const STORAGE_KEY = "zenblade.profiles.v2";
 export const deepClone = (value) => JSON.parse(JSON.stringify(value));
@@ -38,14 +38,7 @@ export function normalizeStore(raw, validCodes = {}) {
     const p = store.profiles[i],
       l = src.lighting || {},
       a = src.actuation || {};
-    p.lighting = {
-      isOn: l.isOn !== false,
-      mode: number(l.mode, 1) || 1,
-      brightness: clamp(number(l.brightness, 80), 0, 100),
-      speed: clamp(number(l.speed, 50), 0, 100),
-      hue: clamp(number(l.hue, 0), 0, 359),
-      saturation: clamp(number(l.saturation, 100), 0, 100),
-    };
+    p.lighting = normalizeLighting(l, defaultLighting());
     p.actuation = {
       press: clamp(number(a.press, 15), 1, 40),
       release: clamp(number(a.release, 15), 1, 40),
