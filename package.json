@@ -16,7 +16,8 @@
     "dev": "electron . --dev",
     "build": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
     "install-app": "bash scripts/install.sh",
-    "update": "bash scripts/install.sh"
+    "update": "bash scripts/install.sh",
+    "test": "node --experimental-default-type=module --test"
   },
   "devDependencies": {
     "electron": "^33.2.1",
