@@ -3,8 +3,8 @@ import {
   LIGHT_CATEGORIES,
   LIGHT_MODES,
 } from "./lighting-modes.js";
-import { clamp, hexToRgb, hsvToRgb, rgbToHex, rgbToHsl, rgbToHsv } from "./color.js";
-import { effectPreviewKind, paintEffectPreview } from "./lighting-preview.js";
+import { clamp, hexToRgb, hsvToRgb, rgbToCss, rgbToHex, rgbToHsl, rgbToHsv } from "./color.js";
+import { paintEffectPreview } from "./lighting-preview.js";
 
 export const colorUiForMode = (hasColor, colorUi) =>
   hasColor && colorUi === "hidden" ? "simple" : colorUi;
@@ -13,6 +13,26 @@ export const lightingColorUpdate = (rgb) => {
   const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
   return { hue: hsv.h, saturation: hsv.s, brightness: hsv.v };
 };
+
+export function wheelGeometry(size) {
+  const center = size / 2;
+  const hueRadius = center - 5;
+  return { center, hueRadius, saturationRadius: hueRadius - 14 };
+}
+
+export function wheelMarkerPosition(lighting, size) {
+  const { center, saturationRadius } = wheelGeometry(size);
+  const angle = lighting.hue * Math.PI / 180;
+  const distance = lighting.saturation / 100 * saturationRadius;
+  return {
+    x: center + Math.cos(angle) * distance,
+    y: center + Math.sin(angle) * distance,
+  };
+}
+
+export function isWheelHitArea(x, y, size) {
+  return Math.hypot(x, y) <= wheelGeometry(size).hueRadius;
+}
 
 export function createLightingUi({ model, paint, toast }) {
   const { state, setLighting } = model;
@@ -91,8 +111,7 @@ export function createLightingUi({ model, paint, toast }) {
   function drawWheel() {
     if (!wheel || !ctx) return;
     const size = wheel.width;
-    const center = size / 2;
-    const radius = center - 2;
+    const { center, hueRadius, saturationRadius } = wheelGeometry(size);
     const image = wheelImage || ctx.createImageData(size, size);
     if (!wheelImage) {
       for (let y = 0; y < size; y++) {
@@ -101,12 +120,9 @@ export function createLightingUi({ model, paint, toast }) {
           const dy = y - center;
           const distance = Math.hypot(dx, dy);
           const index = (y * size + x) * 4;
-          if (distance <= radius) {
-            const rgb = hsvToRgb(
-              (Math.atan2(dy, dx) * 180 + 360) % 360,
-              distance / radius * 100,
-              100,
-            );
+          if (distance <= hueRadius) {
+            const hue = (Math.atan2(dy, dx) * 180 + 360) % 360;
+            const rgb = hsvToRgb(hue, distance > saturationRadius ? 100 : distance / saturationRadius * 100, 100);
             image.data.set([rgb.r, rgb.g, rgb.b, 255], index);
           }
         }
@@ -115,17 +131,27 @@ export function createLightingUi({ model, paint, toast }) {
     }
     ctx.putImageData(image, 0, 0);
     const angle = state.lighting.hue * Math.PI / 180;
-    const distance = state.lighting.saturation / 100 * radius;
+    const marker = wheelMarkerPosition(state.lighting, size);
+    const hueX = center + Math.cos(angle) * hueRadius;
+    const hueY = center + Math.sin(angle) * hueRadius;
     ctx.beginPath();
-    ctx.arc(
-      center + Math.cos(angle) * distance,
-      center + Math.sin(angle) * distance,
-      7,
-      0,
-      Math.PI * 2,
-    );
+    ctx.arc(hueX, hueY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#15111d";
+    ctx.fill();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(16, 13, 23, 0.88)";
+    ctx.fill();
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(marker.x, marker.y, 5, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(9, 7, 13, 0.95)";
+    ctx.lineWidth = 2;
     ctx.stroke();
   }
   function visibility() {
@@ -187,13 +213,15 @@ export function createLightingUi({ model, paint, toast }) {
     $("rgbValue").textContent = `${baseRgb.r}, ${baseRgb.g}, ${baseRgb.b}`;
     $("hslValue").textContent = `${hsl.h}, ${hsl.s}%, ${hsl.l}%`;
     $("simpleColorReadout").textContent = `Base color ${baseHex}`;
-    $("effectPreviewLabel").textContent = effectPreviewKind(mode);
+    $("colorWheelSwatch").style.setProperty("--selected-color", rgbToCss(baseRgb));
+    $("colorWheelValue").textContent = baseHex;
+    $("colorWheelMeta").textContent = `Hue ${lighting.hue}° · Saturation ${lighting.saturation}% · Value ${lighting.brightness}%`;
     paintEffectPreview($("effectPreview"), lighting, mode);
     visibility();
     if (state.colorUi === "advanced") drawWheel();
     if (wheel) {
       wheel.setAttribute("aria-valuenow", String(lighting.hue));
-      wheel.setAttribute("aria-valuetext", `Hue ${lighting.hue}, saturation ${lighting.saturation}%`);
+      wheel.setAttribute("aria-valuetext", `Hue ${lighting.hue} degrees, saturation ${lighting.saturation} percent, value ${lighting.brightness} percent`);
     }
   }
   const update = (partial) => {
@@ -276,24 +304,26 @@ export function createLightingUi({ model, paint, toast }) {
   $("inputHex").addEventListener("keydown", (event) => {
     if (event.key === "Enter") applyHex();
   });
-  function wheelEvent(event) {
+  function wheelEvent(event, allowOutside = false) {
     const rect = wheel.getBoundingClientRect();
     const x = (event.clientX - rect.left) * wheel.width / rect.width - wheel.width / 2;
     const y = (event.clientY - rect.top) * wheel.height / rect.height - wheel.height / 2;
-    const radius = wheel.width / 2 - 2;
-    const distance = Math.min(radius, Math.hypot(x, y));
+    if (!allowOutside && !isWheelHitArea(x, y, wheel.width)) return false;
+    const { saturationRadius } = wheelGeometry(wheel.width);
+    const distance = Math.min(saturationRadius, Math.hypot(x, y));
     update({
       hue: Math.round((Math.atan2(y, x) * 180 + 360) % 360),
-      saturation: Math.round(distance / radius * 100),
+      saturation: Math.round(distance / saturationRadius * 100),
     });
+    return true;
   }
   if (wheel) {
     wheel.addEventListener("pointerdown", (event) => {
+      if (!wheelEvent(event)) return;
       dragging = true;
       wheel.setPointerCapture(event.pointerId);
-      wheelEvent(event);
     });
-    wheel.addEventListener("pointermove", (event) => dragging && wheelEvent(event));
+    wheel.addEventListener("pointermove", (event) => dragging && wheelEvent(event, true));
     wheel.addEventListener("pointerup", () => dragging = false);
     wheel.addEventListener("pointercancel", () => dragging = false);
     wheel.addEventListener("keydown", (event) => {

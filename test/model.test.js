@@ -4,7 +4,12 @@ import { createModel } from "../renderer/js/state.js";
 import { normalizeStore } from "../renderer/js/store.js";
 import { keyDisplayColor } from "../renderer/js/preview.js";
 import { uiAccentFromLighting } from "../renderer/js/theme.js";
-import { colorUiForMode, lightingColorUpdate } from "../renderer/js/lighting-ui.js";
+import {
+  colorUiForMode,
+  isWheelHitArea,
+  lightingColorUpdate,
+  wheelMarkerPosition,
+} from "../renderer/js/lighting-ui.js";
 import { DeviceOperationGate } from "../renderer/js/device-ops.js";
 import {
   normalizeLighting,
@@ -20,7 +25,12 @@ import {
   LIGHT_MODES,
   modesForCategory,
 } from "../renderer/js/lighting-modes.js";
-import { effectPreviewKind, effectPreviewSamples } from "../renderer/js/lighting-preview.js";
+import {
+  effectPreviewKeys,
+  effectPreviewKind,
+  effectPreviewSamples,
+} from "../renderer/js/lighting-preview.js";
+import { LAYOUT_KEY_COUNT, ROWS } from "../renderer/js/layout.js";
 
 const codes = { KeyA: 0 };
 const memory = () => { let value = null; return { getItem: () => value, setItem: (_, next) => { value = next; } }; };
@@ -147,6 +157,22 @@ test("effect preview samples the selected pattern instead of a single solid swat
   assert.equal(effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 3)), "Effect preview");
   assert.equal(effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 13)), "Effect preview");
 });
+test("effect preview retains Zenblade's 67-key rows and differentiated keyboard pattern", () => {
+  const lighting = { isOn: true, mode: 3, brightness: 100, hue: 12, saturation: 100 };
+  const keys = effectPreviewKeys(lighting);
+  assert.equal(keys.length, LAYOUT_KEY_COUNT);
+  assert.equal(keys.length, 67);
+  assert.deepEqual(ROWS.map((row) => row.length), [15, 15, 14, 14, 9]);
+  assert.equal(keys.find((key) => key.code === "BSPC").width, 2);
+  assert.notDeepEqual(
+    keys.find((key) => key.code === "ESC").rgb,
+    keys.find((key) => key.code === "SPC").rgb,
+  );
+  assert.notDeepEqual(
+    keys.map((key) => key.rgb),
+    effectPreviewKeys({ ...lighting, hue: 180 }).map((key) => key.rgb),
+  );
+});
 test("advanced HEX color input accepts only the documented six-digit format", () => {
   assert.deepEqual(hexToRgb("#FF00AA"), { r: 255, g: 0, b: 170 });
   assert.equal(hexToRgb("#FF00AA80"), null);
@@ -167,4 +193,19 @@ test("color picker mappings preserve HSV value through lighting brightness", () 
     saturation: 75,
     brightness: 25,
   });
+});
+test("color-wheel marker maps hue around the wheel and saturation from the center", () => {
+  assert.deepEqual(wheelMarkerPosition({ hue: 0, saturation: 0 }, 200), { x: 100, y: 100 });
+  const right = wheelMarkerPosition({ hue: 0, saturation: 100 }, 200);
+  const down = wheelMarkerPosition({ hue: 90, saturation: 100 }, 200);
+  assert.equal(right.y, 100);
+  assert.ok(right.x > 180);
+  assert.equal(down.x, 100);
+  assert.ok(down.y > 180);
+});
+test("color wheel rejects transparent-corner starts while preserving its visible edge", () => {
+  assert.equal(isWheelHitArea(0, 0, 200), true);
+  assert.equal(isWheelHitArea(95, 0, 200), true);
+  assert.equal(isWheelHitArea(96, 0, 200), false);
+  assert.equal(isWheelHitArea(90, 90, 200), false);
 });

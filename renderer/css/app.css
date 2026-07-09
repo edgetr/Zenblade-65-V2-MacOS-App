@@ -512,9 +512,38 @@ label .help-tip,
   gap: 12px;
 }
 
+.lighting-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.85fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.lighting-effect-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.lighting-tuning {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lighting-tuning .field {
+  margin: 0;
+}
+
 @media (max-width: 1100px) {
   .grid-2,
   .grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .lighting-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -995,8 +1024,8 @@ input[type="color"] {
 }
 
 .advanced-color {
-  margin-top: 16px;
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -1021,19 +1050,80 @@ input[type="color"] {
 .advanced-color__wheel-wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
   align-items: center;
+  flex: 0 0 auto;
 }
 
 #colorWheel {
-  width: 200px;
-  height: 200px;
+  width: 172px;
+  height: 172px;
   border-radius: 50%;
   cursor: crosshair;
+  background: #17131f;
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 0 0 5px rgba(9, 7, 13, 0.52),
     0 12px 28px rgba(0, 0, 0, 0.35);
   touch-action: none;
+}
+
+.advanced-color__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.advanced-color__head .card__title { margin: 0; }
+
+.color-wheel__legend,
+.color-wheel__meta {
+  color: var(--fg-mute);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.color-wheel__legend { text-align: right; }
+
+.color-wheel-layout {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.color-wheel__selection {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.color-wheel__selection > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.color-wheel__selection strong {
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.color-wheel__swatch {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border: 3px solid rgba(255, 255, 255, 0.96);
+  border-radius: 50%;
+  background: var(--selected-color, #ff0000);
+  box-shadow: 0 0 0 2px rgba(11, 9, 16, 0.9), 0 7px 16px color-mix(in srgb, var(--selected-color, #ff0000) 38%, transparent);
+}
+
+@media (max-width: 540px) {
+  .lighting-tuning { grid-template-columns: 1fr; }
+  .color-wheel-layout { align-items: flex-start; }
+  .advanced-color__head { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .color-wheel__legend { text-align: left; }
 }
 
 .color-codes {
@@ -1227,25 +1317,46 @@ input[type="color"] {
   cursor: default;
 }
 
-.effect-preview-card { overflow: hidden; }
-
 .effect-preview {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 3px;
-  min-height: 92px;
-  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 14px;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: linear-gradient(145deg, rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.025));
+  background:
+    radial-gradient(circle at 50% 0%, rgba(var(--accent-rgb), 0.08), transparent 46%),
+    linear-gradient(145deg, rgba(0, 0, 0, 0.34), rgba(255, 255, 255, 0.025));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.effect-preview__row {
+  display: grid;
+  grid-template-columns: repeat(64, minmax(0, 1fr));
+  gap: 1px;
+  min-width: 0;
 }
 
 .effect-preview__key {
-  min-height: 20px;
+  display: grid;
+  min-width: 0;
+  min-height: 15px;
+  padding: 0 1px;
+  place-items: center;
   border: 1px solid color-mix(in srgb, var(--preview-rgb) 62%, rgba(255, 255, 255, 0.16));
-  border-radius: 4px 4px 6px 6px;
+  border-radius: 2px 2px 4px 4px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--preview-rgb) 72%, #fff 28%), var(--preview-rgb));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 2px 8px var(--preview-glow);
+  color: rgba(11, 9, 16, 0.72);
+  font-family: var(--font-mono);
+  font-size: clamp(4px, 0.46vw, 6px);
+  font-weight: 800;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  text-shadow: 0 1px rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 2px 7px var(--preview-glow);
 }
 
 .toast {
