@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.electron-cache/
+out/
+.idea/
+.vscode/
+*.swp
+.grok/
+
+# local icon experiments (keep only icon.png + icon.icns)
+build/*preview*
+build/icon-preview.png
+build/final-dock-check.png
+build/installed-dock-preview.png
+build/dock-*
