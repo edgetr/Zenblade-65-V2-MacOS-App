@@ -235,28 +235,177 @@ export function rgbToCss({ r, g, b }, alpha = 1) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function posNorm(pos) {
+  const tCol = pos.colCount > 1 ? pos.col / (pos.colCount - 1) : 0;
+  const tRow = pos.rowCount > 1 ? pos.row / (pos.rowCount - 1) : 0;
+  const dx = tCol - 0.5;
+  const dy = tRow - 0.5;
+  const dist = Math.min(1, Math.sqrt(dx * dx + dy * dy) * 2);
+  let ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+  if (ang < 0) ang += 360;
+  return { tCol, tRow, dist, ang };
+}
+
 export function keyDisplayColor(lighting, pos) {
   const { isOn, mode, hue, saturation, brightness } = lighting;
   if (!isOn || mode === 0) {
     return { r: 42, g: 40, b: 52 };
   }
 
-  const modeMeta = LIGHT_MODES.find((m) => m.id === mode);
-  const value = 18 + (Math.max(0, Math.min(100, brightness)) / 100) * 82;
+  const baseV = 18 + (Math.max(0, Math.min(100, brightness)) / 100) * 82;
   let h = hue;
   let s = Math.max(0, Math.min(100, saturation));
-  if (modeMeta?.rainbow) {
-    s = Math.max(s, 78);
-    const t =
-      pos.colCount > 1
-        ? pos.col / (pos.colCount - 1)
-        : pos.rowCount > 1
-          ? pos.row / (pos.rowCount - 1)
-          : 0;
-    h = (hue + t * 300) % 360;
+  let v = baseV;
+  const { tCol, tRow, dist, ang } = posNorm(pos);
+  const edge = Math.max(tCol < 0.12 || tCol > 0.88 ? 1 : 0, tRow > 0.75 ? 1 : 0);
+
+  switch (mode) {
+    case 1:
+      break;
+    case 2:
+      if (edge) {
+        h = (hue + 48) % 360;
+        s = Math.min(100, s + 12);
+      }
+      break;
+    case 3:
+      s = Math.max(s, 78);
+      h = (hue + tRow * 300) % 360;
+      break;
+    case 4:
+      s = Math.max(s, 78);
+      h = (hue + tCol * 300) % 360;
+      break;
+    case 5:
+      v = baseV * (0.55 + 0.45 * Math.sin(tCol * Math.PI));
+      break;
+    case 6:
+      s = 18 + tCol * 82;
+      break;
+    case 7:
+      v = 22 + tCol * (baseV - 22);
+      break;
+    case 8:
+      s = Math.max(s, 78);
+      h = (hue + ang) % 360;
+      s = 35 + dist * 65;
+      break;
+    case 9:
+      s = Math.max(s, 70);
+      h = (hue + ang * 0.5) % 360;
+      v = 20 + dist * (baseV - 20);
+      break;
+    case 10:
+      s = Math.max(s, 78);
+      h = (hue + ang + dist * 120) % 360;
+      break;
+    case 11:
+      s = Math.max(s, 70);
+      h = (hue + ang + dist * 80) % 360;
+      v = 18 + ((ang / 360) * 0.5 + dist * 0.5) * (baseV - 18);
+      break;
+    case 12:
+      s = Math.max(s, 85);
+      h = (hue + (tCol + tRow) * 180) % 360;
+      break;
+    case 13:
+      s = Math.max(s, 85);
+      h = (hue + tCol * 360) % 360;
+      break;
+    case 14:
+      s = Math.max(s, 85);
+      h = (hue + tRow * 360) % 360;
+      break;
+    case 15: {
+      s = Math.max(s, 85);
+      const chev = Math.abs(tCol - 0.5) * 2 + tRow * 0.35;
+      h = (hue + chev * 280) % 360;
+      break;
+    }
+    case 16:
+      s = Math.max(s, 80);
+      h = (hue + dist * 320) % 360;
+      break;
+    case 17:
+      s = Math.max(s, 80);
+      h = (hue + dist * 320 + (tCol > 0.5 ? 140 : 0)) % 360;
+      break;
+    case 18:
+      s = Math.max(s, 85);
+      h = (hue + ang) % 360;
+      break;
+    case 19:
+      s = Math.max(s, 85);
+      h = (hue + ang + tRow * 90) % 360;
+      break;
+    case 20:
+      s = Math.max(s, 70);
+      h = tCol < 0.5 ? hue : (hue + 180) % 360;
+      break;
+    case 21:
+      s = Math.max(s, 85);
+      h = (hue + Math.floor(tCol * 6) * 60) % 360;
+      break;
+    case 22:
+      s = Math.max(s, 85);
+      h = (hue + ang * 2) % 360;
+      break;
+    case 23:
+    case 24:
+    case 28:
+    case 29:
+    case 30:
+    case 32: {
+      s = Math.max(s, 70);
+      const cell = (pos.col * 17 + pos.row * 31) % 100;
+      h = (hue + cell * 3.6) % 360;
+      v = baseV * (0.4 + (cell % 60) / 100);
+      break;
+    }
+    case 25:
+      h = (hue + tCol * 40 - 20) % 360;
+      if (h < 0) h += 360;
+      break;
+    case 26:
+      s = Math.max(s, 75);
+      h = (hue + Math.sin(tCol * Math.PI * 2) * 50 + tRow * 20) % 360;
+      if (h < 0) h += 360;
+      break;
+    case 27:
+      s = Math.max(s, 80);
+      h = (hue + tCol * 200 + Math.sin(tRow * Math.PI) * 40) % 360;
+      break;
+    case 31:
+      s = Math.max(40, s * 0.7);
+      v = baseV * (0.35 + tCol * 0.45 + (1 - tRow) * 0.2);
+      h = (hue + tCol * 40) % 360;
+      break;
+    case 33:
+    case 34:
+    case 35:
+    case 36:
+    case 37:
+    case 38:
+    case 39:
+    case 40:
+    case 41:
+    case 42:
+    case 43:
+    case 44:
+      v = baseV * (0.5 + 0.5 * (1 - dist));
+      if (mode >= 36) h = (hue + dist * 50) % 360;
+      break;
+    default: {
+      const meta = LIGHT_MODES.find((m) => m.id === mode);
+      if (meta?.rainbow) {
+        s = Math.max(s, 78);
+        h = (hue + tCol * 300) % 360;
+      }
+      break;
+    }
   }
 
-  return hsvToRgb(h, s, value);
+  return hsvToRgb(h, Math.max(0, Math.min(100, s)), Math.max(0, Math.min(100, v)));
 }
 
 export function keyOverrideDisplayColor(lighting, pos) {

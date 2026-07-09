@@ -415,11 +415,27 @@ function updateParamVisibility() {
   setVis("fieldHue", showColor);
   setVis("fieldSat", showColor);
   setVis("fieldColor", showColor);
+  setVis("simpleColorControls", showColor);
   const adv = $("advancedColor");
-  if (adv && !showColor) {
-    adv.hidden = true;
+  if (!showColor) {
+    if (adv) adv.hidden = true;
     state.advancedColorOpen = false;
   }
+  syncAdvancedColorMode();
+}
+
+function syncAdvancedColorMode() {
+  const adv = $("advancedColor");
+  const simple = $("simpleColorControls");
+  const open = !!state.advancedColorOpen;
+  if (adv) adv.hidden = !open;
+  if (simple) {
+    const mode = LIGHT_MODES.find((m) => m.id === state.lighting.mode);
+    const showColor = (mode?.params || []).includes("color");
+    simple.hidden = open || !showColor;
+  }
+  const btn = $("btnToggleAdvancedColor");
+  if (btn) btn.textContent = open ? "Simple" : "Advanced";
 }
 
 function paintBoardsFromLighting() {
@@ -507,9 +523,6 @@ function openKeyEditor(code) {
   $("keyOutRelease").textContent = String(release);
   $("keyMacro").value = ov?.macro || "";
   $("keyCombo").value = ov?.combo || "";
-  $("keyEditorNote").textContent = ov
-    ? "This key has a custom override (different color on the board)."
-    : "Using global Feel defaults. Change values to create an override.";
   paintBoardsFromLighting();
 }
 
@@ -781,17 +794,20 @@ if (wheelCanvas) {
   });
 }
 
-$("btnToggleAdvancedColor")?.addEventListener("click", () => {
-  state.advancedColorOpen = !state.advancedColorOpen;
-  const panel = $("advancedColor");
-  if (panel) panel.hidden = !state.advancedColorOpen;
-  $("btnToggleAdvancedColor").textContent = state.advancedColorOpen
-    ? "Simple"
-    : "Advanced";
+function setAdvancedColorOpen(open) {
+  state.advancedColorOpen = !!open;
+  syncAdvancedColorMode();
   if (state.advancedColorOpen) {
     drawColorWheel();
     syncAdvancedColorFields();
   }
+}
+
+$("btnToggleAdvancedColor")?.addEventListener("click", () => {
+  setAdvancedColorOpen(!state.advancedColorOpen);
+});
+$("btnToggleAdvancedColorClose")?.addEventListener("click", () => {
+  setAdvancedColorOpen(false);
 });
 
 function syncAdvancedColorFields() {
@@ -817,26 +833,8 @@ function syncAdvancedColorFields() {
     setFieldInvalid(hslEl, false);
   }
 
-  const brightOut = $("outAdvBright");
-  const brightEl = $("lightValue");
-  if (brightEl && document.activeElement !== brightEl) {
-    brightEl.value = String(state.lighting.brightness);
-  }
-  if (brightOut) brightOut.textContent = String(state.lighting.brightness);
-
   if (state.advancedColorOpen) drawColorWheel();
 }
-
-$("lightValue")?.addEventListener("input", (e) => {
-  const v = Number(e.target.value);
-  state.lighting.brightness = v;
-  $("lightBright").value = v;
-  $("outBright").textContent = String(v);
-  const advOut = $("outAdvBright");
-  if (advOut) advOut.textContent = String(v);
-  paintBoardsFromLighting();
-  scheduleLightingSave();
-});
 
 function parseRgbText(raw) {
   const cleaned = String(raw || "")
@@ -982,6 +980,88 @@ function applyActuationToForm(A) {
   $("actRT").checked = A.rapidTrigger !== false;
 }
 
+function initHelpTips() {
+  const pop = $("helpPop");
+  if (!pop) return;
+  let hideTimer = 0;
+
+  function placePop(btn) {
+    const text = btn.getAttribute("data-help") || "";
+    if (!text) return;
+    pop.textContent = text;
+    pop.hidden = false;
+    const r = btn.getBoundingClientRect();
+    const pad = 10;
+    const pw = Math.min(280, window.innerWidth - pad * 2);
+    pop.style.width = `${pw}px`;
+    pop.style.maxWidth = `${pw}px`;
+    requestAnimationFrame(() => {
+      const pr = pop.getBoundingClientRect();
+      let left = r.left + r.width / 2 - pr.width / 2;
+      left = Math.max(pad, Math.min(left, window.innerWidth - pr.width - pad));
+      let top = r.bottom + 8;
+      if (top + pr.height > window.innerHeight - pad) {
+        top = r.top - pr.height - 8;
+      }
+      pop.style.left = `${left}px`;
+      pop.style.top = `${Math.max(pad, top)}px`;
+    });
+  }
+
+  function hidePop() {
+    pop.hidden = true;
+  }
+
+  document.addEventListener(
+    "pointerover",
+    (e) => {
+      const btn = e.target.closest?.(".help-tip");
+      if (!btn) return;
+      clearTimeout(hideTimer);
+      placePop(btn);
+    },
+    true
+  );
+  document.addEventListener(
+    "pointerout",
+    (e) => {
+      const btn = e.target.closest?.(".help-tip");
+      if (!btn) return;
+      const to = e.relatedTarget;
+      if (to && (btn.contains(to) || pop.contains(to))) return;
+      hideTimer = setTimeout(hidePop, 120);
+    },
+    true
+  );
+  pop.addEventListener("pointerenter", () => clearTimeout(hideTimer));
+  pop.addEventListener("pointerleave", hidePop);
+  document.addEventListener("scroll", hidePop, true);
+  window.addEventListener("resize", hidePop);
+
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest?.(".help-tip");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!pop.hidden && pop.dataset.for === btn) {
+      hidePop();
+      return;
+    }
+    pop.dataset.for = "";
+    placePop(btn);
+  });
+}
+
+$("btnClearTypingTest")?.addEventListener("click", () => {
+  const ta = $("typingTest");
+  if (ta) {
+    ta.value = "";
+    ta.focus();
+  }
+});
+
+initHelpTips();
+
 function syncKeyEditorFromFeelIfNeeded() {
   if (!state.selectedKey || state.keyOverrides[state.selectedKey]) return;
   const press = state.actuation.press;
@@ -992,10 +1072,6 @@ function syncKeyEditorFromFeelIfNeeded() {
   if ($("keyOutPress")) $("keyOutPress").textContent = String(press);
   if (kr) kr.value = release;
   if ($("keyOutRelease")) $("keyOutRelease").textContent = String(release);
-  if ($("keyEditorNote")) {
-    $("keyEditorNote").textContent =
-      "Using global Feel defaults. Change values to create an override.";
-  }
 }
 
 function bindAct(id, outId, key) {
