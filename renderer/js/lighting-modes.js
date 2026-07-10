@@ -12,6 +12,10 @@ export const LIGHT_MODES = names.map((name, index) => ({
   name,
   category: categoryForMode(index + 1),
   rainbow: ![1, 2, 5, 6, 7, 25, 31, ...Array.from({ length: 12 }, (_, n) => n + 33)].includes(index + 1),
+  // The firmware accepts a speed byte for every mode, but only these effects
+  // actually animate. Keep that capability explicit for the UI.
+  usesSpeed: speedModes.has(index + 1),
+  usesColor: colorModes.has(index + 1),
   params: ["brightness", ...(speedModes.has(index + 1) ? ["speed"] : []), ...(colorModes.has(index + 1) ? ["color"] : [])],
 }));
 export const modesForCategory = (category = "All") =>

@@ -1,7 +1,7 @@
 import { PROFILE_COUNT } from "./protocol.js";
 import { applyProfile } from "./device-ops.js";
 
-export function createProfileController({ kb, model, state, gate, writeFeel, sync, toast }) {
+export function createProfileController({ kb, model, state, gate, writeFeel, sync, toast, onLightingRead, onLightingApplied }) {
   const showRetry = () => {
     let button = document.getElementById("btnRetrySync");
     if (!button) {
@@ -21,6 +21,7 @@ export function createProfileController({ kb, model, state, gate, writeFeel, syn
       sync();
       if (!kb.connected) return toast(`Profile ${index + 1} selected`, "ok");
       const result = await applyProfile(kb, state, writeFeel);
+      if (result.lightingOk) onLightingApplied?.(state.lighting);
       if (result.deviceProfileOk && result.lightingOk && result.feelOk) {
         state.syncIncomplete = null;
         showRetry();
@@ -39,6 +40,7 @@ export function createProfileController({ kb, model, state, gate, writeFeel, syn
   async function retry() {
     if (!state.syncIncomplete) return;
     const result = await gate.run("Profile recovery", () => applyProfile(kb, state, writeFeel));
+    if (result.lightingOk) onLightingApplied?.(state.lighting);
     if (result.deviceProfileOk && result.lightingOk && result.feelOk) {
       state.syncIncomplete = null;
       showRetry();
@@ -55,7 +57,11 @@ export function createProfileController({ kb, model, state, gate, writeFeel, syn
     } catch (error) { result.profileError = error; }
     try {
       const lighting = await kb.readLighting();
-      if (result.profileOk) { model.setLighting(lighting, { persist: false }); model.persist(true); }
+      if (result.profileOk) {
+        model.setLighting(lighting, { persist: false });
+        model.persist(true);
+        onLightingRead?.(lighting);
+      }
       result.lightingOk = true;
     } catch (error) { result.lightingError = error; }
     if (restoreFeel && result.profileOk) try { await writeFeel(); result.feelOk = true; } catch (error) { result.feelError = error; }

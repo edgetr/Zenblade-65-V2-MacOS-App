@@ -16,6 +16,9 @@ export function installBootstrapUi({
   setConnected,
 }) {
   const $ = (id) => document.getElementById(id);
+  const setDiscoveryVisible = (visible) => {
+    $("deviceDiscovery").hidden = !visible;
+  };
   const setActivePanel = (panel) => {
     document.querySelectorAll(".nav__btn").forEach((item) => {
       const active = item.dataset.panel === panel;
@@ -32,19 +35,25 @@ export function installBootstrapUi({
     });
   };
 
-  $("btnConnect").addEventListener("click", () => connect());
-  $("btnDisconnect").addEventListener("click", disconnect);
   $("btnRefresh").addEventListener(
     "click",
     () =>
       gate.run("Refresh", () => refresh({ restoreFeel: true })).catch(() => {}),
   );
+  $("btnChooseKeyboard").addEventListener("click", async () => {
+    // This click is the user activation WebHID requires on systems that do
+    // not permit a first-launch picker during automatic discovery.
+    setDiscoveryVisible(false);
+    const result = await connect();
+    if (!result) setDiscoveryVisible(true);
+  });
   $("btnApplyLighting").addEventListener(
     "click",
     () =>
       gate.run("Lighting apply", async () => {
         await kb.writeLighting(state.lighting);
         model.flush();
+        lighting.markApplied();
         toast("Lighting applied — Refresh verifies it.", "ok");
       }).catch(() => {}),
   );
@@ -83,7 +92,9 @@ export function installBootstrapUi({
     });
     navigator.hid.addEventListener("connect", (event) => {
       const zenblade = pickZenbladeDevice([event.device]);
-      if (!state.connected && zenblade) connect(zenblade);
+      if (!state.connected && zenblade) {
+        connect(zenblade).then((result) => setDiscoveryVisible(!result));
+      }
     });
   }
   window.zenShell?.onReconnect?.(() =>
@@ -125,6 +136,17 @@ export function installBootstrapUi({
   (async () => {
     if (!navigator.hid) return toast("WebHID unavailable", "error");
     const known = pickZenbladeDevice(await navigator.hid.getDevices());
-    if (known) await connect(known);
+    if (known) {
+      const result = await connect(known);
+      setDiscoveryVisible(!result);
+    }
+    // On first launch there is no approved device for getDevices() to return.
+    // Electron/WebHID may allow this filtered request; if it requires a user
+    // gesture, connect() deliberately fails quietly and the Device menu can
+    // retry it later.
+    else {
+      const result = await connect(undefined, { quiet: true });
+      setDiscoveryVisible(!result);
+    }
   })().catch(() => {});
 }

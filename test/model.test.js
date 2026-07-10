@@ -7,6 +7,8 @@ import { uiAccentFromLighting } from "../renderer/js/theme.js";
 import {
   colorUiForMode,
   isWheelHitArea,
+  lightingIsDirty,
+  lightingMatches,
   lightingColorUpdate,
   wheelMarkerPosition,
 } from "../renderer/js/lighting-ui.js";
@@ -59,6 +61,16 @@ test("device gate preserves a disconnect-driven disabled state", async () => {
     control.disabled = true;
     gate.preserveCurrentState();
   });
+  assert.equal(control.disabled, true);
+  assert.equal(control.textContent, "Apply");
+});
+test("device gate restores derived controls after its busy state ends", async () => {
+  const control = { disabled: false, textContent: "Apply", dataset: {} };
+  const gate = new DeviceOperationGate({
+    controls: () => [control],
+    afterRun: () => { control.disabled = true; },
+  });
+  await gate.run("Apply", async () => {});
   assert.equal(control.disabled, true);
   assert.equal(control.textContent, "Apply");
 });
@@ -139,6 +151,20 @@ test("effect categories retain every firmware effect and filter without duplicat
     modesForCategory("Reactive").map((mode) => mode.id),
     LIGHT_MODES.filter((mode) => mode.category === "Reactive").map((mode) => mode.id),
   );
+});
+test("only firmware effects that animate expose a speed control", () => {
+  for (const id of [1, 2, 3, 4, 23, 24, 32]) {
+    const mode = LIGHT_MODES.find((entry) => entry.id === id);
+    assert.equal(mode.usesSpeed, false, `mode ${id}`);
+    assert.equal(mode.params.includes("speed"), false, `mode ${id}`);
+  }
+  assert.equal(LIGHT_MODES.find((entry) => entry.id === 5).usesSpeed, true);
+});
+test("lighting apply becomes dirty only against a known normalized baseline", () => {
+  const baseline = normalizeLighting({ mode: 3, hue: 20, brightness: 80 });
+  assert.equal(lightingIsDirty(baseline, null), false);
+  assert.equal(lightingMatches(baseline, { ...baseline }), true);
+  assert.equal(lightingIsDirty({ ...baseline, brightness: 81 }, baseline), true);
 });
 test("category filters preserve an off-filter selection with a usable tab stop", () => {
   const state = categorySelectionState("Static", 3);

@@ -36,12 +36,15 @@ function deviceControls() {
     ...document.querySelectorAll(".profile-card"),
   ].map((x) => typeof x === "string" ? $(x) : x);
 }
-const gate = new DeviceOperationGate({ toast, controls: deviceControls });
+let lighting;
+const gate = new DeviceOperationGate({
+  toast,
+  controls: deviceControls,
+  afterRun: () => lighting?.syncApplyState(),
+});
 function setConnected(on, info) {
   if (!on) gate.preserveCurrentState();
   state.connected = on;
-  $("btnConnect").disabled = on;
-  $("btnDisconnect").disabled = !on;
   $("btnRefresh").disabled = !on;
   document.querySelectorAll(".nav__btn[data-panel]").forEach((b) => {
     if (b.dataset.panel !== "keyboard") b.disabled = !on;
@@ -53,9 +56,10 @@ function setConnected(on, info) {
   $("statPid").textContent = info
     ? `0x${info.productId.toString(16).padStart(4, "0")}`
     : "—";
+  if (!on) lighting?.clearAppliedBaseline();
+  else lighting?.syncApplyState();
   profiles.sync();
 }
-let lighting;
 const board = createBoard({
   state,
   onSelect: (code) => editor.open(code),
@@ -64,7 +68,7 @@ const board = createBoard({
     applyTheme(state.lighting);
   },
 });
-lighting = createLightingUi({ model, paint: board.paint, toast });
+lighting = createLightingUi({ model, paint: board.paint, toast, connected: () => state.connected });
 async function writeFeel() {
   const values = buildActuationMatrix(
     state,
@@ -93,10 +97,14 @@ function syncAll() {
   profiles.sync();
   board.paint();
 }
-const profileController = createProfileController({ kb, model, state, gate, writeFeel, sync: syncAll, toast });
+const profileController = createProfileController({
+  kb, model, state, gate, writeFeel, sync: syncAll, toast,
+  onLightingRead: lighting.markApplied,
+  onLightingApplied: lighting.markApplied,
+});
 profiles = createProfilesUi({ model, connected: () => state.connected, onSelect: profileController.select });
 const refresh = profileController.refresh;
-async function connect(existing) {
+async function connect(existing, { quiet = false } = {}) {
   return gate.run("Connection", async () => {
     const info = await kb.connect(existing);
     setConnected(true, info);
@@ -105,7 +113,10 @@ async function connect(existing) {
   }).catch((error) => {
     if (error.message?.includes("waiting for the current device operation")) return;
     setConnected(false, null);
-    toast(error.message || String(error), "error");
+    // A first-launch WebHID request may be rejected because the runtime has
+    // no user activation or no keyboard is present. That is an expected
+    // discovery outcome, not an error the user needs to dismiss.
+    if (!quiet) toast(error.message || String(error), "error");
   });
 }
 async function disconnect() {

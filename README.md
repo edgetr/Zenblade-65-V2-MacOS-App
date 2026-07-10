@@ -51,7 +51,7 @@ It rebuilds the app and replaces the one in Applications.
 
 1. Plug in the keyboard.
 2. Open **Zenblade**.
-3. Open the **Keyboard** tab and press **Connect**.
+3. Open the app with the keyboard connected. Zenblade detects approved devices automatically; on first use, approve the filtered Zenblade picker if your system presents it. The Device menu can retry discovery later.
 4. Pick your keyboard if macOS asks for permission.
 
 Status should show that you are connected.

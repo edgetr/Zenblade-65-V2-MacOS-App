@@ -5,6 +5,7 @@ import {
 } from "./lighting-modes.js";
 import { clamp, hexToRgb, hsvToRgb, rgbToCss, rgbToHex, rgbToHsl, rgbToHsv } from "./color.js";
 import { paintEffectPreview } from "./lighting-preview.js";
+import { normalizeLighting } from "./protocol.js";
 
 export const colorUiForMode = (hasColor, colorUi) =>
   hasColor && colorUi === "hidden" ? "simple" : colorUi;
@@ -13,6 +14,12 @@ export const lightingColorUpdate = (rgb) => {
   const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
   return { hue: hsv.h, saturation: hsv.s, brightness: hsv.v };
 };
+
+const lightingKeys = ["isOn", "mode", "brightness", "speed", "hue", "saturation"];
+export const lightingMatches = (left, right) =>
+  !!left && !!right && lightingKeys.every((key) => left[key] === right[key]);
+export const lightingIsDirty = (lighting, baseline) =>
+  !!baseline && !lightingMatches(lighting, baseline);
 
 export function wheelGeometry(size) {
   const center = size / 2;
@@ -34,21 +41,23 @@ export function isWheelHitArea(x, y, size) {
   return Math.hypot(x, y) <= wheelGeometry(size).hueRadius;
 }
 
-export function createLightingUi({ model, paint, toast }) {
+export function createLightingUi({ model, paint, toast, connected }) {
   const { state, setLighting } = model;
+  const isConnected = connected || (() => state.connected);
   const $ = (id) => document.getElementById(id);
   const grid = $("modeGrid");
   const categoryGrid = $("modeCategories");
   const wheel = $("colorWheel");
   const ctx = wheel?.getContext("2d");
-  let category = "All";
+  let category = (LIGHT_MODES.find((mode) => mode.id === state.lighting.mode) || LIGHT_MODES[0]).category;
   let dragging = false;
   let wheelImage = null;
   let paintFrame = 0;
+  let appliedBaseline = null;
 
   const currentMode = () =>
     LIGHT_MODES.find((mode) => mode.id === state.lighting.mode) || LIGHT_MODES[0];
-  const allowsBaseColor = () => currentMode().params.includes("color");
+  const allowsBaseColor = () => currentMode().usesColor;
   const schedulePaint = () => {
     if (paintFrame) return;
     paintFrame = requestAnimationFrame(() => {
@@ -63,6 +72,18 @@ export function createLightingUi({ model, paint, toast }) {
     const min = Number(input.min) || 0;
     const max = Number(input.max) || 100;
     input.style.setProperty("--range-progress", `${(Number(value) - min) / (max - min) * 100}%`);
+  };
+  const syncApplyState = () => {
+    const button = $("btnApplyLighting");
+    if (button) button.disabled = !isConnected() || !lightingIsDirty(state.lighting, appliedBaseline);
+  };
+  const markApplied = (lighting = state.lighting) => {
+    appliedBaseline = normalizeLighting(lighting, state.lighting);
+    syncApplyState();
+  };
+  const clearAppliedBaseline = () => {
+    appliedBaseline = null;
+    syncApplyState();
   };
 
   function renderCategories() {
@@ -158,7 +179,7 @@ export function createLightingUi({ model, paint, toast }) {
     const mode = currentMode();
     const params = mode.params;
     $("fieldBright").hidden = !params.includes("brightness");
-    $("fieldSpeed").hidden = !params.includes("speed");
+    $("fieldSpeed").hidden = !mode.usesSpeed;
     const canEditColor = allowsBaseColor();
     state.colorUi = colorUiForMode(canEditColor, state.colorUi);
     if (!canEditColor) state.colorUi = "hidden";
@@ -219,10 +240,7 @@ export function createLightingUi({ model, paint, toast }) {
     paintEffectPreview($("effectPreview"), lighting, mode);
     visibility();
     if (state.colorUi === "advanced") drawWheel();
-    if (wheel) {
-      wheel.setAttribute("aria-valuenow", String(lighting.hue));
-      wheel.setAttribute("aria-valuetext", `Hue ${lighting.hue} degrees, saturation ${lighting.saturation} percent, value ${lighting.brightness} percent`);
-    }
+    syncApplyState();
   }
   const update = (partial) => {
     setLighting(partial);
@@ -337,5 +355,5 @@ export function createLightingUi({ model, paint, toast }) {
       }
     });
   }
-  return { sync, visibility };
+  return { sync, visibility, syncApplyState, markApplied, clearAppliedBaseline };
 }

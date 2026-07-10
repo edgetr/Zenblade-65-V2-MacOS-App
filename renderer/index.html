@@ -81,9 +81,11 @@
           <section class="panel is-active" id="panel-keyboard">
             <div class="connect-top">
               <div class="btn-row">
-                <button class="btn btn--primary" id="btnConnect">Connect</button>
-                <button class="btn btn--ghost" id="btnDisconnect" disabled>Disconnect</button>
                 <button class="btn btn--ghost" id="btnRefresh" disabled>Refresh</button>
+                <div class="device-discovery" id="deviceDiscovery" hidden>
+                  <span>Keyboard not detected</span>
+                  <button class="btn btn--primary btn--sm" id="btnChooseKeyboard">Choose keyboard</button>
+                </div>
               </div>
               <dl class="stat-inline" id="deviceStats">
                 <div class="stat-inline__item">
@@ -170,7 +172,6 @@
                 <div class="mode-grid" id="modeGrid"></div>
                 <p class="mode-filter-note" id="modeFilterNotice" hidden></p>
                 <p class="sr-only" id="effectSelectionStatus" aria-live="polite"></p>
-                <div class="effect-preview" id="effectPreview" role="img"></div>
               </div>
               <div class="card lighting-controls-card">
                 <div class="lighting-tuning">
@@ -203,7 +204,7 @@
                   </div>
                   <div class="color-wheel-layout">
                     <div class="advanced-color__wheel-wrap">
-                      <canvas id="colorWheel" width="200" height="200" tabindex="0" role="slider" aria-label="Color wheel" aria-valuemin="0" aria-valuemax="359" aria-describedby="colorWheelHelp"></canvas>
+                      <canvas id="colorWheel" width="200" height="200" tabindex="0" role="group" aria-label="Hue and saturation color wheel" aria-describedby="colorWheelHelp"></canvas>
                     </div>
                     <div class="color-wheel__selection">
                       <span class="color-wheel__swatch" id="colorWheelSwatch" aria-hidden="true"></span>
@@ -229,6 +230,7 @@
                   </div>
                 </div>
               </div>
+              <div class="effect-preview" id="effectPreview" role="img"></div>
             </div>
           </section>
 

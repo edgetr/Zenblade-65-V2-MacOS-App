@@ -1,7 +1,8 @@
 export class DeviceOperationGate {
-  constructor({ toast, controls = () => [] } = {}) {
+  constructor({ toast, controls = () => [], afterRun } = {}) {
     this.toast = toast;
     this.controls = controls;
+    this.afterRun = afterRun;
     this.running = false;
     this.preserveCurrentState = this.preserveCurrentState.bind(this);
   }
@@ -33,6 +34,9 @@ export class DeviceOperationGate {
         if (!this.controlStateChanged) el.disabled = false;
         if (el.dataset.busyLabel) el.textContent = el.dataset.busyLabel;
       });
+      // A control may have state beyond connection/busy (for example a
+      // settings Apply button with a clean/dirty baseline). Restore it last.
+      this.afterRun?.();
     }
   }
   preserveCurrentState() {

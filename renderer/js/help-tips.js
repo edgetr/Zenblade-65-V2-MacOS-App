@@ -1,77 +1,57 @@
 export function initHelpTips() {
   const pop = document.getElementById("helpPop");
   if (!pop) return;
-  let current = null, pinned = null, hideTimer = 0;
+
+  let current = null;
+  let positionFrame = 0;
   const hide = () => {
+    if (positionFrame) cancelAnimationFrame(positionFrame);
+    positionFrame = 0;
     current?.removeAttribute("aria-describedby");
     current = null;
-    pinned = null;
     pop.hidden = true;
   };
   const show = (button) => {
-    const text = button.dataset.help;
+    const text = button?.dataset.help;
     if (!text) return;
+    if (positionFrame) cancelAnimationFrame(positionFrame);
+    current?.removeAttribute("aria-describedby");
     current = button;
-    if (!pop.id) pop.id = "helpPop";
-    button.setAttribute("aria-describedby", pop.id);
+    button.setAttribute("aria-describedby", pop.id || "helpPop");
     pop.textContent = text;
     pop.hidden = false;
-    const r = button.getBoundingClientRect(), pad = 10;
-    const width = Math.min(280, innerWidth - pad * 2);
-    pop.style.width = `${width}px`;
-    requestAnimationFrame(() => {
+    positionFrame = requestAnimationFrame(() => {
+      positionFrame = 0;
+      // A pointer/focus transition may have hidden or replaced the tip while
+      // the frame was pending. Never revive an old popup.
+      if (current !== button || pop.hidden) return;
+      const r = button.getBoundingClientRect();
+      const pad = 10;
+      const width = Math.min(280, innerWidth - pad * 2);
+      pop.style.width = `${width}px`;
       const p = pop.getBoundingClientRect();
-      pop.style.left = `${
-        Math.max(
-          pad,
-          Math.min(
-            r.left + r.width / 2 - p.width / 2,
-            innerWidth - p.width - pad,
-          ),
-        )
-      }px`;
-      pop.style.top = `${
-        Math.max(
-          pad,
-          r.bottom + 8 + p.height > innerHeight - pad
-            ? r.top - p.height - 8
-            : r.bottom + 8,
-        )
-      }px`;
+      pop.style.left = `${Math.max(pad, Math.min(r.left + r.width / 2 - p.width / 2, innerWidth - p.width - pad))}px`;
+      pop.style.top = `${Math.max(pad, r.bottom + 8 + p.height > innerHeight - pad ? r.top - p.height - 8 : r.bottom + 8)}px`;
     });
   };
-  document.addEventListener("pointerover", (e) => {
-    const b = e.target.closest?.(".help-tip");
-    if (b) {
-      clearTimeout(hideTimer);
-      show(b);
-    }
+
+  document.addEventListener("pointerover", (event) => {
+    const button = event.target.closest?.(".help-tip");
+    if (button && current !== button) show(button);
   }, true);
-  document.addEventListener("pointerout", (e) => {
-    const b = e.target.closest?.(".help-tip");
-    if (b && !pop.contains(e.relatedTarget)) hideTimer = setTimeout(hide, 120);
+  document.addEventListener("pointerout", (event) => {
+    const button = event.target.closest?.(".help-tip");
+    if (button === current && !button.contains(event.relatedTarget)) hide();
   }, true);
-  document.addEventListener("click", (e) => {
-    const b = e.target.closest?.(".help-tip");
-    if (!b) return;
-    e.preventDefault();
-    e.stopPropagation();
-    // Hover may have already opened this popup; only a prior click pins it.
-    if (pinned === b) hide();
-    else {
-      pinned = b;
-      show(b);
-    }
+  document.addEventListener("focusin", (event) => {
+    const button = event.target.closest?.(".help-tip");
+    if (button) show(button);
   });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") hide();
+  document.addEventListener("focusout", (event) => {
+    if (event.target === current) hide();
   });
-  document.addEventListener("focusin", (e) => {
-    const b = e.target.closest?.(".help-tip");
-    if (b) show(b);
-  });
-  document.addEventListener("focusout", (e) => {
-    if (e.target === current) hideTimer = setTimeout(hide, 120);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hide();
   });
   addEventListener("resize", hide);
   document.addEventListener("scroll", hide, true);
