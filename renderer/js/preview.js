@@ -1,8 +1,8 @@
 import { hsvToRgb, rgbToCss, rgbToHsv } from "./color.js";
+import { lightingWirePreview } from "./protocol.js";
 
 const OFF = { r: 42, g: 40, b: 52 };
 const recipes = {
-  2: { kind: "edge" },
   3: { kind: "gradient", axis: "row", span: 300 },
   4: { kind: "gradient", axis: "col", span: 300 },
   5: { kind: "breath" },
@@ -62,13 +62,6 @@ const norm = (p) => {
 
 const handlers = {
   solid: (ctx) => ctx,
-  edge: (ctx) => {
-    if (ctx.p.x < .12 || ctx.p.x > .88 || ctx.p.y > .75) {
-      ctx.h += 48;
-      ctx.s = Math.min(100, ctx.s + 12);
-    }
-    return ctx;
-  },
   gradient: (ctx) => {
     ctx.s = Math.max(ctx.s, 78);
     ctx.h += (ctx.r.axis === "row"
@@ -158,14 +151,17 @@ const handlers = {
   },
 };
 
+// Pure per-key colour for keyboard and effect previews. Always quantizes to the
+// 8-bit wire values the firmware receives (no cosmetic brightness lift).
 export function keyDisplayColor(lighting, pos) {
-  if (!lighting.isOn || lighting.mode === 0) return OFF;
+  const L = lightingWirePreview(lighting);
+  if (!L.isOn || L.mode === 0) return OFF;
   const p = norm(pos);
-  const r = recipes[lighting.mode] || { kind: "solid" };
-  const base = 18 + Math.max(0, Math.min(100, lighting.brightness)) * .82;
+  const r = recipes[L.mode] || { kind: "solid" };
+  const base = Math.max(0, Math.min(100, L.brightness));
   let ctx = {
-    h: lighting.hue || 0,
-    s: Math.max(0, Math.min(100, lighting.saturation)),
+    h: L.hue || 0,
+    s: Math.max(0, Math.min(100, L.saturation)),
     v: base,
     p,
     r,
@@ -191,4 +187,11 @@ export function lightingSwatchCss(lighting) {
   return rgbToCss(
     keyDisplayColor(lighting, { col: 0, row: 0, colCount: 1, rowCount: 1 }),
   );
+}
+
+// Base colour after wire quantization — used for solid single-color swatches
+// and the native colour readout.
+export function baseWireColor(lighting) {
+  const L = lightingWirePreview(lighting);
+  return hsvToRgb(L.hue, L.saturation, L.brightness);
 }

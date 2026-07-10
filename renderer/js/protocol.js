@@ -10,6 +10,16 @@ const finite = (value, fallback) =>
 const boundedInteger = (value, low, high, fallback) =>
   Math.round(Math.max(low, Math.min(high, finite(value, fallback))));
 
+// Unsupported firmware IDs (currently mode 2 / Alpha Mods) fall back to Solid.
+// Other IDs 3–44 are preserved exactly and must not be renumbered.
+const UNSUPPORTED_MODES = new Set([2]);
+const FALLBACK_MODE = 1;
+
+export function resolveLightingMode(mode, fallback = 1) {
+  const resolved = boundedInteger(mode, 1, LIGHT_MODE_MAX, fallback);
+  return UNSUPPORTED_MODES.has(resolved) ? FALLBACK_MODE : resolved;
+}
+
 // Keep lighting values safe at both application and device boundaries. The
 // application always holds a firmware effect from 1–44; only isOn:false emits
 // the wire-level zero value that disables keyboard lighting.
@@ -18,13 +28,14 @@ export function normalizeLighting(lighting = {}, fallback = {}) {
     isOn: typeof lighting.isOn === "boolean"
       ? lighting.isOn
       : (typeof fallback.isOn === "boolean" ? fallback.isOn : true),
-    mode: boundedInteger(lighting.mode, 1, LIGHT_MODE_MAX, fallback.mode ?? 1),
+    mode: resolveLightingMode(lighting.mode, fallback.mode ?? 1),
     brightness: boundedInteger(lighting.brightness, 0, 100, fallback.brightness ?? 80),
     speed: boundedInteger(lighting.speed, 0, 100, fallback.speed ?? 50),
     hue: boundedInteger(lighting.hue, 0, 359, fallback.hue ?? 0),
     saturation: boundedInteger(lighting.saturation, 0, 100, fallback.saturation ?? 100),
   };
 }
+
 export const HID_FILTERS = PIDS.flatMap((
   productId,
 ) => [{ vendorId: VID, productId, usagePage: 0xff01, usage: 1 }, {
@@ -45,6 +56,23 @@ export const colorFromWire = (hue, saturation) => ({
   hue: Math.max(0, Math.min(360, Math.round(Number(hue) / 255 * 360))),
   saturation: pctFromWire(saturation),
 });
+
+// Single source of truth for digital previews/readouts: the 8-bit values the
+// firmware actually receives for hue, saturation, brightness, and speed.
+// This is wire quantization, not physical LED/monitor colorimetric calibration.
+export function lightingWirePreview(lighting = {}, fallback = {}) {
+  const base = normalizeLighting(lighting, fallback);
+  const wireColor = colorToWire(base.hue, base.saturation);
+  const color = colorFromWire(wireColor.hue, wireColor.saturation);
+  return {
+    ...base,
+    brightness: pctFromWire(pctToWire(base.brightness)),
+    speed: pctFromWire(pctToWire(base.speed)),
+    // colorFromWire can yield 360 at the top of the byte range; HSV wraps it.
+    hue: color.hue % 360,
+    saturation: color.saturation,
+  };
+}
 export function pickZenbladeDevice(devices) {
   const list = devices.filter((d) =>
     d.vendorId === VID && PIDS.includes(d.productId)

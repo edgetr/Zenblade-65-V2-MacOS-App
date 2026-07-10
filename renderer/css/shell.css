@@ -21,15 +21,6 @@
   -webkit-backdrop-filter: blur(18px) saturate(1.25);
 }
 
-.titlebar__mark {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--text-xs);
-  letter-spacing: 0.2em;
-  text-transform: lowercase;
-  color: var(--fg-mute);
-}
-
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -67,13 +58,6 @@
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.1;
-}
-
-.sidebar__brand-text p {
-  margin: 3px 0 0;
-  font-size: var(--text-xs);
-  color: var(--fg-mute);
-  letter-spacing: 0.04em;
 }
 
 .nav {
@@ -412,13 +396,6 @@ label .help-tip,
   margin-bottom: 10px;
 }
 
-.advanced-color__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
 .grid-2 {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
@@ -671,14 +648,24 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
 #lightSpeed { --range-fill: #c9b6ff; }
 
 input[type="color"] {
-  width: 48px;
-  height: 40px;
-  padding: 4px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border: none;
-  border-radius: 12px;
+  border-radius: 50%;
   background: var(--bg-2);
   box-shadow: 0 0 0 1px var(--line-strong);
   cursor: pointer;
+  overflow: hidden;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+input[type="color"]::-webkit-color-swatch {
+  border: 2px solid rgba(255, 255, 255, 0.86);
+  border-radius: 50%;
 }
 
 .text-input {

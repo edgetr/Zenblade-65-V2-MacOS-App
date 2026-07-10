@@ -17,7 +17,6 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     keyOverrides: deepClone(current.keyOverrides),
     appNotes: deepClone(current.appNotes),
     selectedKey: null,
-    colorUi: "simple",
     syncIncomplete: null,
   };
   let timer = 0;
@@ -57,15 +56,6 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     state.actuation = normalizeActuation(partial, state.actuation);
     if (shouldPersist) persist();
     return state.actuation;
-  };
-
-  const setColorUi = (mode) => {
-    state.colorUi = mode === "advanced"
-      ? "advanced"
-      : mode === "hidden"
-      ? "hidden"
-      : "simple";
-    return state.colorUi;
   };
 
   const setOverride = (code, values, notes) => {
@@ -111,7 +101,6 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     store,
     setLighting,
     setActuation,
-    setColorUi,
     setOverride,
     resetOverride,
     selectProfile,

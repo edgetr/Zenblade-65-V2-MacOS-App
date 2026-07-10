@@ -4,23 +4,15 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; script-src 'self'; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data:;"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'; img-src 'self' data:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Zenblade</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="css/app.css" />
   </head>
   <body>
     <div id="app">
-      <header class="titlebar">
-        <div class="titlebar__mark">zenblade</div>
-      </header>
+      <header class="titlebar" aria-label="Zenblade"></header>
 
       <aside class="sidebar">
         <div class="sidebar__brand">
@@ -32,7 +24,6 @@
           />
           <div class="sidebar__brand-text">
             <h1>Zenblade</h1>
-            <p>your board</p>
           </div>
         </div>
 
@@ -46,7 +37,7 @@
             </span>
             <span class="label">Keyboard</span>
           </button>
-          <button class="nav__btn" data-panel="lighting" disabled>
+          <button class="nav__btn" data-panel="lighting">
             <span class="nav__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
                 <circle cx="12" cy="12" r="4" />
@@ -55,7 +46,7 @@
             </span>
             <span class="label">Lights</span>
           </button>
-          <button class="nav__btn" data-panel="actuation" disabled>
+          <button class="nav__btn" data-panel="actuation">
             <span class="nav__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
                 <path d="M12 3v10" stroke-linecap="round" />
@@ -65,7 +56,7 @@
             </span>
             <span class="label">Feel</span>
           </button>
-          <button class="nav__btn" data-panel="profiles" disabled>
+          <button class="nav__btn" data-panel="profiles">
             <span class="nav__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
                 <path d="M4 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" />
@@ -118,7 +109,7 @@
                 <div class="key-editor__body" id="keyEditorBody" hidden>
                   <div class="card-toolbar">
                     <h3 class="card__title" id="keyEditorTitle">Key</h3>
-                    <button type="button" class="btn btn--ghost btn--sm" id="btnResetKey">Reset to Default</button>
+                    <button type="button" class="btn btn--ghost btn--sm" id="btnResetKey">Reset Key</button>
                   </div>
                   <div class="field">
                     <label for="keyPress">Press <output id="keyOutPress">15</output></label>
@@ -129,20 +120,6 @@
                     <label for="keyRelease">Release <output id="keyOutRelease">15</output></label>
                     <button type="button" class="help-tip" data-help="How far up the key must travel before it unregisters. Used with Rapid Trigger for quick re-taps." aria-label="Help: Release">?</button>
                     <input type="range" id="keyRelease" aria-label="Release point" min="1" max="40" value="15" />
-                  </div>
-                  <div class="field">
-                    <label for="keyMacro">
-                      Macro
-                      <button type="button" class="help-tip" data-help="A short text sequence saved on this key in the app. For your notes and planning — not sent to the keyboard firmware." aria-label="Help: Macro">?</button>
-                    </label>
-                    <input type="text" class="text-input" id="keyMacro" placeholder="e.g. Hello" maxlength="64" spellcheck="false" />
-                  </div>
-                  <div class="field">
-                    <label for="keyCombo">
-                      Combo
-                      <button type="button" class="help-tip" data-help="A shortcut you want this key to stand for (for example Cmd+C). Saved in the app only — not programmed into the keyboard." aria-label="Help: Combo">?</button>
-                    </label>
-                    <input type="text" class="text-input" id="keyCombo" placeholder="e.g. Cmd+C" maxlength="48" spellcheck="false" />
                   </div>
                   <div class="btn-row">
                     <button type="button" class="btn btn--primary" id="btnApplyKey">Apply Key</button>
@@ -190,45 +167,12 @@
                 <div id="simpleColorControls">
                   <div class="color-row" id="fieldColor">
                     <label for="lightColorPicker">Base color</label>
-                    <input type="color" id="lightColorPicker" value="#ff0000" />
-                    <span class="mono" id="simpleColorReadout" aria-live="polite">Base RGB #FF0000</span>
+                    <input type="color" id="lightColorPicker" value="#ff0000" aria-describedby="simpleColorReadout" />
+                    <span class="mono" id="simpleColorReadout" aria-live="polite">#FF0000</span>
                   </div>
+                  <div class="color-swatches" id="colorSwatches" hidden aria-label="Effect colors"></div>
                 </div>
                 <p class="color-unavailable" id="colorUnavailable" hidden></p>
-                <button type="button" class="btn btn--ghost btn--sm color-advanced-toggle" id="btnToggleAdvancedColor" aria-controls="advancedColor" aria-expanded="false">Advanced…</button>
-
-                <div class="advanced-color" id="advancedColor" hidden>
-                  <div class="advanced-color__head">
-                    <span class="card__title">Color wheel</span>
-                    <span class="color-wheel__legend">Angle: hue · distance: saturation · Brightness: value</span>
-                  </div>
-                  <div class="color-wheel-layout">
-                    <div class="advanced-color__wheel-wrap">
-                      <canvas id="colorWheel" width="200" height="200" tabindex="0" role="group" aria-label="Hue and saturation color wheel" aria-describedby="colorWheelHelp"></canvas>
-                    </div>
-                    <div class="color-wheel__selection">
-                      <span class="color-wheel__swatch" id="colorWheelSwatch" aria-hidden="true"></span>
-                      <div>
-                        <strong class="mono" id="colorWheelValue">#FF0000</strong>
-                        <span class="color-wheel__meta" id="colorWheelMeta">Hue 0° · Saturation 100% · Value 100%</span>
-                      </div>
-                    </div>
-                  </div>
-                  <span class="sr-only" id="colorWheelHelp">Left and right arrow keys change hue. Up and down arrow keys change saturation. Hold Shift for larger steps. Brightness controls color value.</span>
-                  <div class="color-codes">
-                    <div class="field field--inline">
-                      <label for="inputHex">
-                        HEX
-                        <button type="button" class="help-tip" data-help="Exact base color as a six-digit HEX code, for example #FF0000." aria-label="Help: HEX">?</button>
-                      </label>
-                      <input type="text" class="text-input text-input--mono" id="inputHex" maxlength="7" placeholder="#RRGGBB" spellcheck="false" />
-                    </div>
-                    <dl class="color-derived" aria-label="Derived color values">
-                      <div><dt>RGB</dt><dd class="mono" id="rgbValue">255, 0, 0</dd></div>
-                      <div><dt>HSL</dt><dd class="mono" id="hslValue">0, 100%, 50%</dd></div>
-                    </dl>
-                  </div>
-                </div>
               </div>
               <div class="effect-preview" id="effectPreview" role="img"></div>
             </div>

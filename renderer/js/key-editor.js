@@ -1,6 +1,6 @@
 import { $ } from "./dom.js";
 
-export function createKeyEditor({ model, paint, onApply, toast }) {
+export function createKeyEditor({ model, paint, onApply, toast, connected }) {
   const { state, setOverride, resetOverride, setActuation } = model;
 
   function open(code) {
@@ -8,7 +8,6 @@ export function createKeyEditor({ model, paint, onApply, toast }) {
     $("keyEditorEmpty").hidden = true;
     $("keyEditorBody").hidden = false;
     const ov = state.keyOverrides[code] || {};
-    const notes = state.appNotes[code] || {};
     $("keyEditorTitle").textContent = code;
     [["keyPress", "keyOutPress", ov.press ?? state.actuation.press], [
       "keyRelease",
@@ -18,8 +17,6 @@ export function createKeyEditor({ model, paint, onApply, toast }) {
       $(input).value = value;
       $(out).textContent = value;
     });
-    $("keyMacro").value = notes.macro || "";
-    $("keyCombo").value = notes.combo || "";
     paint();
   }
 
@@ -44,17 +41,16 @@ export function createKeyEditor({ model, paint, onApply, toast }) {
       press: Number($("keyPress").value),
       release: Number($("keyRelease").value),
     };
-    const notes = {
-      macro: $("keyMacro").value.trim(),
-      combo: $("keyCombo").value.trim(),
-    };
-    setOverride(state.selectedKey, values, notes);
+    setOverride(state.selectedKey, values);
     open(state.selectedKey);
     try {
       await onApply();
-      toast("Key applied", "ok");
+      toast(
+        connected?.() ? "Key applied" : "Key saved locally",
+        "ok",
+      );
     } catch (error) {
-      toast(`Key saved locally — ${error.message}`, "error");
+      toast(`Saved locally — ${error.message}`, "error");
     }
   });
 
@@ -64,7 +60,10 @@ export function createKeyEditor({ model, paint, onApply, toast }) {
     open(state.selectedKey);
     try {
       await onApply();
-      toast("Key reset", "ok");
+      toast(
+        connected?.() ? "Key reset on keyboard" : "Key reset saved locally",
+        "ok",
+      );
     } catch (error) {
       toast(`Reset saved locally — ${error.message}`, "error");
     }
@@ -96,8 +95,8 @@ export function createKeyEditor({ model, paint, onApply, toast }) {
           ? { press: 15, release: 15, rapidTrigger: true }
           : { press: 22, release: 20, rapidTrigger: false },
       );
+      // Sliders already reflect the preset — skip redundant selection toasts.
       syncFeel();
-      toast(p, "ok");
     })
   );
 

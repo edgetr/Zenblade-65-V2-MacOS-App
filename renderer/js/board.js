@@ -5,9 +5,11 @@ import {
 } from "./preview.js";
 import { rgbToCss } from "./color.js";
 import { $ } from "./dom.js";
+
 export function createBoard({ state, onSelect, onPaint } = {}) {
   let paintRaf = 0, scaleRaf = 0;
   const last = new WeakMap();
+
   function render(root, interactive = false) {
     root.innerHTML = "";
     ROWS.forEach((row, rowIndex) => {
@@ -34,32 +36,28 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
       root.append(line);
     });
   }
+
   const pos = (key) => ({
     col: +key.dataset.col,
     row: +key.dataset.row,
     colCount: +key.dataset.cols,
     rowCount: +key.dataset.rows,
   });
+
+  // Use the computed device colour directly — no pastel lift on the fill.
+  // Legend readability comes from text-shadow in CSS, not whitened key tops.
   function applyPaint(key, rgb, lit) {
     const css = rgbToCss(rgb);
     key.classList.toggle("is-lit", lit);
     key.style.setProperty("--key-rgb", css);
     key.style.setProperty(
       "--key-glow",
-      lit ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .65)` : "transparent",
+      lit ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .55)` : "transparent",
     );
-    key.style.setProperty(
-      "--key-top",
-      lit
-        ? rgbToCss({
-          r: Math.min(255, Math.round(rgb.r * .55 + 115)),
-          g: Math.min(255, Math.round(rgb.g * .55 + 115)),
-          b: Math.min(255, Math.round(rgb.b * .55 + 115)),
-        })
-        : "#2a3038",
-    );
+    key.style.setProperty("--key-top", lit ? css : "#2a3038");
     key.style.setProperty("--key-bot", lit ? css : "#1c2128");
   }
+
   function paintRoot(root) {
     if (!root) return;
     const L = state.lighting,
@@ -81,14 +79,19 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
       applyPaint(key, rgb, lit || override);
     });
   }
+
   function paint() {
     if (paintRaf) return;
     paintRaf = requestAnimationFrame(() => {
       paintRaf = 0;
       paintRoot($("keyboardBoard"));
+      // Selection/override-only paints must not re-sync lighting UI / rewrite
+      // the 67-key effect preview. Callers that change lighting invoke
+      // lighting.sync() themselves.
       onPaint?.();
     });
   }
+
   function scale(root) {
     const wrap = root.closest(".board-wrap") || root.parentElement,
       style = getComputedStyle(wrap),
@@ -103,9 +106,11 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
     root.style.setProperty("--u", `${u}px`);
     root.style.setProperty("--key-gap", `${gap}px`);
   }
+
   function scaleAll() {
     document.querySelectorAll(".board").forEach(scale);
   }
+
   function scheduleScale() {
     if (scaleRaf) return;
     scaleRaf = requestAnimationFrame(() => {
@@ -113,6 +118,7 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
       scaleAll();
     });
   }
+
   render($("keyboardBoard"), true);
   $("keyboardBoard").addEventListener("click", (e) => {
     const key = e.target.closest(".key");

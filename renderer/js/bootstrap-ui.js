@@ -15,6 +15,7 @@ export function installBootstrapUi({
   disconnect,
   setConnected,
   syncChrome,
+  writeFeel,
 }) {
   const setDiscoveryVisible = (visible) => {
     $("deviceDiscovery").hidden = !visible;
@@ -52,7 +53,7 @@ export function installBootstrapUi({
         await kb.writeLighting(state.lighting);
         model.flush();
         lighting.markApplied();
-        toast("Lighting applied — Refresh verifies it.", "ok");
+        toast("Lighting applied", "ok");
       }).catch(() => {}),
   );
   $("btnApplyActuation").addEventListener(
@@ -138,8 +139,10 @@ export function installBootstrapUi({
   (async () => {
     if (!navigator.hid) return toast("WebHID unavailable", "error");
     const known = pickZenbladeDevice(await navigator.hid.getDevices());
+    // Startup auto-connect: keep connection stats accurate, but suppress the
+    // Connected/Synced success toasts. User-initiated Choose/Refresh still toast.
     if (known) {
-      const result = await connect(known);
+      const result = await connect(known, { quiet: true });
       setDiscoveryVisible(!result);
     } else {
       const result = await connect(undefined, { quiet: true });

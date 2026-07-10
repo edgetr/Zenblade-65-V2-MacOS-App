@@ -1,35 +1,40 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createModel } from "../renderer/js/state.js";
 import { normalizeActuation, normalizeStore } from "../renderer/js/store.js";
-import { keyDisplayColor } from "../renderer/js/preview.js";
+import { baseWireColor, keyDisplayColor } from "../renderer/js/preview.js";
 import { uiAccentFromLighting } from "../renderer/js/theme.js";
 import {
-  colorUiForMode,
-  isWheelHitArea,
   lightingIsDirty,
   lightingMatches,
   lightingColorUpdate,
-  wheelMarkerPosition,
 } from "../renderer/js/lighting-ui.js";
 import { DeviceOperationGate } from "../renderer/js/device-ops.js";
 import {
+  colorFromWire,
+  colorToWire,
+  lightingWirePreview,
   normalizeLighting,
   pctFromWire,
   pctToWire,
   pickZenbladeDevice,
+  resolveLightingMode,
   responseMatchesCommand,
   VID,
   PIDS,
   ZenbladeDevice,
 } from "../renderer/js/protocol.js";
-import { hexToRgb, rgbToHsv } from "../renderer/js/color.js";
+import { hexToRgb, rgbToHex, rgbToHsv } from "../renderer/js/color.js";
 import {
   categorySelectionState,
   LIGHT_MODES,
   modesForCategory,
+  UNSUPPORTED_LIGHT_MODES,
 } from "../renderer/js/lighting-modes.js";
 import {
+  colorSwatchPlan,
+  effectEndpointColors,
   effectPreviewKeys,
   effectPreviewKind,
   effectPreviewSamples,
@@ -110,11 +115,6 @@ test("preview and chrome retain distinct legibility policy", () => {
     }),
     { r: 184, g: 245, b: 200 },
   );
-});
-
-test("returns to simple color controls after a colorless mode", () => {
-  assert.equal(colorUiForMode(true, "hidden"), "simple");
-  assert.equal(colorUiForMode(false, "hidden"), "hidden");
 });
 
 test("device gate serializes work and notifies chrome on busy transitions", async () => {
@@ -213,6 +213,34 @@ test("lighting is normalized at the model boundary before persistence", () => {
   );
 });
 
+test("Alpha Mods (firmware mode 2) is unsupported and falls back to Solid", () => {
+  assert.equal(UNSUPPORTED_LIGHT_MODES.has(2), true);
+  assert.equal(resolveLightingMode(2), 1);
+  assert.equal(normalizeLighting({ mode: 2 }).mode, 1);
+  assert.equal(
+    normalizeLighting({ mode: 2 }, { mode: 5, brightness: 40 }).mode,
+    1,
+  );
+  assert.equal(
+    LIGHT_MODES.some((mode) => mode.id === 2 || mode.name === "Alpha Mods"),
+    false,
+  );
+  assert.equal(LIGHT_MODES.find((mode) => mode.id === 1).name, "Solid");
+  assert.equal(LIGHT_MODES.find((mode) => mode.id === 3).name, "Gradient V");
+  assert.equal(LIGHT_MODES.find((mode) => mode.id === 44).name, "Solid Multi Splash");
+  // IDs 3–44 must not be renumbered after removing mode 2 from the list.
+  for (const id of [3, 4, 12, 22, 33, 44]) {
+    assert.equal(LIGHT_MODES.find((mode) => mode.id === id)?.id, id);
+  }
+  const store = normalizeStore({
+    profiles: [{ lighting: { mode: 2, hue: 90, brightness: 70 } }],
+  }, codes);
+  assert.equal(store.profiles[0].lighting.mode, 1);
+  const model = createModel({ storage: memory(), validCodes: codes });
+  model.setLighting({ mode: 2 });
+  assert.equal(model.state.lighting.mode, 1);
+});
+
 test("actuation is normalized at the model boundary before persistence", () => {
   const model = createModel({ storage: memory(), validCodes: codes });
   model.setActuation({ press: 0, release: 99, rapidTrigger: "yes" });
@@ -227,13 +255,6 @@ test("actuation is normalized at the model boundary before persistence", () => {
   );
   model.setOverride("KeyA", { press: -4, release: 80 });
   assert.deepEqual(model.state.keyOverrides.KeyA, { press: 1, release: 40 });
-});
-
-test("colorUi changes go through the model API", () => {
-  const model = createModel({ storage: memory(), validCodes: codes });
-  assert.equal(model.setColorUi("advanced"), "advanced");
-  assert.equal(model.state.colorUi, "advanced");
-  assert.equal(model.setColorUi("nope"), "simple");
 });
 
 test("brightness wire packing and read conversion preserve edge percentages", async () => {
@@ -261,6 +282,42 @@ test("brightness wire packing and read conversion preserve edge percentages", as
     ]);
     assert.equal(pctFromWire(pctToWire(brightness)), brightness);
   }
+});
+
+test("lightingWirePreview matches the 8-bit values written to firmware", () => {
+  const lighting = {
+    isOn: true,
+    mode: 1,
+    brightness: 33,
+    speed: 67,
+    hue: 17,
+    saturation: 41,
+  };
+  const wire = lightingWirePreview(lighting);
+  assert.equal(wire.brightness, pctFromWire(pctToWire(33)));
+  assert.equal(wire.speed, pctFromWire(pctToWire(67)));
+  const packed = colorToWire(17, 41);
+  const unpacked = colorFromWire(packed.hue, packed.saturation);
+  assert.equal(wire.hue, unpacked.hue % 360);
+  assert.equal(wire.saturation, unpacked.saturation);
+  // Preview colour uses the same quantized HSV (no brightness floor / lift).
+  assert.deepEqual(
+    baseWireColor(lighting),
+    keyDisplayColor(lighting, { col: 0, row: 0, colCount: 1, rowCount: 1 }),
+  );
+  // Mode 2 is normalized before wire preview.
+  assert.equal(lightingWirePreview({ ...lighting, mode: 2 }).mode, 1);
+});
+
+test("key preview does not lift zero brightness above the wire value", () => {
+  const rgb = keyDisplayColor({
+    isOn: true,
+    mode: 1,
+    hue: 0,
+    saturation: 100,
+    brightness: 0,
+  }, { col: 0, row: 0, colCount: 1, rowCount: 1 });
+  assert.deepEqual(rgb, { r: 0, g: 0, b: 0 });
 });
 
 test("HID response matching never accepts a rich command by its first byte", () => {
@@ -292,9 +349,10 @@ test("HID response matching never accepts a rich command by its first byte", () 
   );
 });
 
-test("effect categories retain every firmware effect and filter without duplicates", () => {
+test("effect categories retain every selectable firmware effect and filter without duplicates", () => {
   const ids = modesForCategory("All").map((mode) => mode.id);
   assert.equal(new Set(ids).size, LIGHT_MODES.length);
+  assert.equal(ids.includes(2), false);
   assert.deepEqual(
     modesForCategory("Reactive").map((mode) => mode.id),
     LIGHT_MODES.filter((mode) => mode.category === "Reactive").map((mode) =>
@@ -304,7 +362,7 @@ test("effect categories retain every firmware effect and filter without duplicat
 });
 
 test("only firmware effects that animate expose a speed control", () => {
-  for (const id of [1, 2, 3, 4, 23, 24, 32]) {
+  for (const id of [1, 3, 4, 23, 24, 32]) {
     const mode = LIGHT_MODES.find((entry) => entry.id === id);
     assert.equal(mode.usesSpeed, false, `mode ${id}`);
     assert.equal(mode.params.includes("speed"), false, `mode ${id}`);
@@ -312,14 +370,34 @@ test("only firmware effects that animate expose a speed control", () => {
   assert.equal(LIGHT_MODES.find((entry) => entry.id === 5).usesSpeed, true);
 });
 
-test("lighting apply becomes dirty only against a known normalized baseline", () => {
+test("lighting apply stays available without a verified baseline and locks once matched", () => {
   const baseline = normalizeLighting({ mode: 3, hue: 20, brightness: 80 });
-  assert.equal(lightingIsDirty(baseline, null), false);
+  assert.equal(lightingIsDirty(baseline, null), true);
   assert.equal(lightingMatches(baseline, { ...baseline }), true);
+  assert.equal(lightingIsDirty(baseline, baseline), false);
   assert.equal(
     lightingIsDirty({ ...baseline, brightness: 81 }, baseline),
     true,
   );
+});
+
+test("bootstrap-ui wires writeFeel from app bootstrap", () => {
+  const bootstrap = readFileSync(
+    new URL("../renderer/js/bootstrap-ui.js", import.meta.url),
+    "utf8",
+  );
+  const app = readFileSync(
+    new URL("../renderer/js/app.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(bootstrap, /writeFeel/);
+  assert.match(app, /installBootstrapUi\(\{[\s\S]*writeFeel/);
+  assert.match(bootstrap, /Lighting applied"/);
+  assert.doesNotMatch(bootstrap, /Refresh verifies it/);
+  assert.match(bootstrap, /quiet:\s*true/);
+  assert.match(app, /refresh\(\{ restoreFeel: true, quiet \}/);
+  // Selection/override paints must not re-sync lighting UI.
+  assert.doesNotMatch(app, /onPaint:[\s\S]*lighting\?\.sync/);
 });
 
 test("category filters preserve an off-filter selection with a usable tab stop", () => {
@@ -347,10 +425,6 @@ test("effect preview samples the selected pattern instead of a single solid swat
   assert.equal(
     effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 1)),
     "Base RGB",
-  );
-  assert.equal(
-    effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 2)),
-    "Effect preview",
   );
   assert.equal(
     effectPreviewKind(LIGHT_MODES.find((mode) => mode.id === 3)),
@@ -385,7 +459,46 @@ test("effect preview retains Zenblade's 67-key rows and differentiated keyboard 
   );
 });
 
-test("advanced HEX color input accepts only the documented six-digit format", () => {
+test("color UI: picker only for single-color, two endpoint swatches for gradients, none for palettes", () => {
+  const solid = {
+    isOn: true,
+    mode: 1,
+    brightness: 100,
+    hue: 0,
+    saturation: 100,
+  };
+  const solidPlan = colorSwatchPlan(solid);
+  assert.equal(solidPlan.kind, "single");
+  assert.equal(solidPlan.swatches.length, 0);
+  assert.equal(solidPlan.showPicker, true);
+
+  const gradient = { ...solid, mode: 3 };
+  const gradientPlan = colorSwatchPlan(gradient);
+  assert.equal(gradientPlan.kind, "endpoints");
+  assert.equal(gradientPlan.swatches.length, 2);
+  const ends = effectEndpointColors(gradient);
+  assert.equal(gradientPlan.swatches[0].hex, rgbToHex(ends.start).toUpperCase());
+  assert.equal(gradientPlan.swatches[1].hex, rgbToHex(ends.end).toUpperCase());
+  // Endpoints match first/last keyboard preview keys.
+  const keys = effectPreviewKeys(gradient);
+  assert.deepEqual(ends.start, keys[0].rgb);
+  assert.deepEqual(ends.end, keys[keys.length - 1].rgb);
+
+  const gradientH = colorSwatchPlan({ ...solid, mode: 4 });
+  assert.equal(gradientH.kind, "endpoints");
+  assert.equal(gradientH.swatches.length, 2);
+
+  const multi = colorSwatchPlan({ ...solid, mode: 13 });
+  assert.equal(multi.kind, "none");
+  assert.equal(multi.swatches.length, 0);
+  assert.equal(multi.showPicker, false);
+
+  const pinwheel = colorSwatchPlan({ ...solid, mode: 8 });
+  assert.equal(pinwheel.kind, "none");
+  assert.equal(pinwheel.showPicker, true);
+});
+
+test("HEX color helper accepts only the documented six-digit format", () => {
   assert.deepEqual(hexToRgb("#FF00AA"), { r: 255, g: 0, b: 170 });
   assert.equal(hexToRgb("#FF00AA80"), null);
 });
@@ -408,22 +521,27 @@ test("color picker mappings preserve HSV value through lighting brightness", () 
   });
 });
 
-test("color-wheel marker maps hue around the wheel and saturation from the center", () => {
-  assert.deepEqual(
-    wheelMarkerPosition({ hue: 0, saturation: 0 }, 200),
-    { x: 100, y: 100 },
+test("advanced color UI is fully removed from the renderer shell", () => {
+  const html = readFileSync(
+    new URL("../renderer/index.html", import.meta.url),
+    "utf8",
   );
-  const right = wheelMarkerPosition({ hue: 0, saturation: 100 }, 200);
-  const down = wheelMarkerPosition({ hue: 90, saturation: 100 }, 200);
-  assert.equal(right.y, 100);
-  assert.ok(right.x > 180);
-  assert.equal(down.x, 100);
-  assert.ok(down.y > 180);
+  const lightingUi = readFileSync(
+    new URL("../renderer/js/lighting-ui.js", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(html, /btnToggleAdvancedColor|advancedColor|colorWheel|inputHex/);
+  assert.doesNotMatch(lightingUi, /drawWheel|wheelMarkerPosition|isWheelHitArea|advanced/);
+  assert.doesNotMatch(lightingUi, /textContent\s*=\s*swatch\.hex/);
+  assert.match(html, /lightColorPicker/);
+  assert.match(html, /colorSwatches/);
 });
 
-test("color wheel rejects transparent-corner starts while preserving its visible edge", () => {
-  assert.equal(isWheelHitArea(0, 0, 200), true);
-  assert.equal(isWheelHitArea(95, 0, 200), true);
-  assert.equal(isWheelHitArea(96, 0, 200), false);
-  assert.equal(isWheelHitArea(90, 90, 200), false);
+test("feel presets update sliders without a selection toast", () => {
+  const keyEditor = readFileSync(
+    new URL("../renderer/js/key-editor.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(keyEditor, /data-preset/);
+  assert.doesNotMatch(keyEditor, /toast\(p/);
 });

@@ -1,9 +1,9 @@
-import { rgbToCss } from "./color.js";
+import { rgbToCss, rgbToHex } from "./color.js";
 import { CODE_TO_MATRIX_INDEX, LAYOUT_KEY_COUNT, ROWS } from "./layout.js";
-import { keyDisplayColor } from "./preview.js";
+import { baseWireColor, keyDisplayColor } from "./preview.js";
+import { modeById } from "./lighting-modes.js";
 
 const KEYBOARD_UNITS = 16;
-
 export function effectPreviewKeys(lighting) {
   return ROWS.flatMap((row, rowIndex) => {
     let x = 0;
@@ -44,6 +44,45 @@ export function effectPreviewDescription(lighting, mode) {
     : "Key colours show the selected pattern across the keyboard.";
   const power = lighting?.isOn ? "Lighting on." : "Lighting off.";
   return `${effect} keyboard preview. ${colorMeaning} ${power}`;
+}
+
+// First/last key colours from the same layout traversal used by the keyboard
+// preview, so endpoint swatches always match visible gradient ends.
+export function effectEndpointColors(lighting) {
+  const keys = effectPreviewKeys(lighting);
+  if (!keys.length) return { start: baseWireColor(lighting), end: baseWireColor(lighting) };
+  return { start: keys[0].rgb, end: keys[keys.length - 1].rgb };
+}
+
+// Pure plan for colour UI: one swatch for single-color modes, two endpoint
+// swatches for Gradient V/H, none for multi-color palette modes.
+export function colorSwatchPlan(lighting, mode = modeById(lighting?.mode)) {
+  const resolved = mode || modeById(1);
+  if (resolved.gradientEndpoints) {
+    const { start, end } = effectEndpointColors(lighting);
+    return {
+      kind: "endpoints",
+      showPicker: true,
+      swatches: [
+        { rgb: start, hex: rgbToHex(start).toUpperCase(), label: "Start" },
+        { rgb: end, hex: rgbToHex(end).toUpperCase(), label: "End" },
+      ],
+    };
+  }
+  if (resolved.singleColor && resolved.usesColor) {
+    return {
+      kind: "single",
+      showPicker: true,
+      // The native picker is the single editable color bubble; do not repeat
+      // the same value as a second read-only swatch.
+      swatches: [],
+    };
+  }
+  return {
+    kind: "none",
+    showPicker: !!resolved.usesColor,
+    swatches: [],
+  };
 }
 
 export function paintEffectPreview(root, lighting, mode) {

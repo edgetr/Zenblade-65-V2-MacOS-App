@@ -8,6 +8,7 @@ out/
 .vscode/
 *.swp
 .grok/
+AGENTS.md
 
 # local icon experiments (keep only icon.png + icon.icns)
 build/*preview*

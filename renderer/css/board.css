@@ -56,7 +56,7 @@
   background:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.1) 0%,
       rgba(255, 255, 255, 0.02) 28%,
       transparent 55%
     ),
@@ -67,7 +67,7 @@
       color-mix(in srgb, var(--key-bot) 72%, #000) 100%
     );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
     inset 0 -2px 4px rgba(0, 0, 0, 0.25),
     0 1px 0 rgba(255, 255, 255, 0.04),
     0 3px 0 #0a0810,
@@ -85,14 +85,9 @@
   position: relative;
   overflow: hidden;
   line-height: 1.1;
-  transition:
-    box-shadow 0.16s var(--ease),
-    background 0.16s var(--ease),
-    border-color 0.16s var(--ease),
-    color 0.16s var(--ease),
-    transform 0.12s var(--ease),
-    width 0.12s var(--ease),
-    height 0.12s var(--ease);
+  /* Avoid animating transform/box-shadow/background across 67 keys (hover jank). */
+  transition: border-color 0.05s linear, outline-color 0.05s linear;
+  contain: paint;
 }
 
 .key::before {
@@ -104,9 +99,9 @@
     var(--key-glow, transparent),
     transparent 70%
   );
-  opacity: 0.9;
+  opacity: 0.85;
   pointer-events: none;
-  mix-blend-mode: screen;
+  /* mix-blend-mode was expensive across 67 keys; plain overlay is enough. */
   z-index: 0;
 }
 
@@ -117,11 +112,10 @@
   border-radius: max(4px, calc(var(--u, 42px) * 0.12));
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.05) 0%,
     transparent 40%,
-    rgba(0, 0, 0, 0.12) 100%
+    rgba(0, 0, 0, 0.1) 100%
   );
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   pointer-events: none;
   z-index: 0;
 }
@@ -135,9 +129,11 @@
   cursor: pointer;
 }
 
+/* Cheap immediate hover — border/outline only, no transform or shadow churn. */
 .board--interactive .key:hover {
-  transform: translateY(-1px);
-  border-color: rgba(var(--accent-rgb), 0.45);
+  border-color: rgba(var(--accent-rgb), 0.55);
+  outline: 1px solid rgba(var(--accent-rgb), 0.4);
+  outline-offset: 0;
   z-index: 2;
 }
 
@@ -148,26 +144,32 @@
 }
 
 .key.is-lit {
-  border-color: color-mix(in srgb, var(--key-rgb) 70%, rgba(255, 255, 255, 0.25));
+  background: var(--key-rgb);
+  border-color: color-mix(in srgb, var(--key-rgb) 70%, rgba(255, 255, 255, 0.2));
   color: #fff;
+  /* Legend contrast without altering the underlying key fill colour. */
   text-shadow:
-    0 0 8px rgba(0, 0, 0, 0.55),
-    0 1px 0 rgba(0, 0, 0, 0.35);
+    0 0 6px rgba(0, 0, 0, 0.75),
+    0 1px 2px rgba(0, 0, 0, 0.65),
+    0 0 1px rgba(0, 0, 0, 0.9);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
     inset 0 -2px 4px rgba(0, 0, 0, 0.2),
-    0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 0 rgba(255, 255, 255, 0.04),
     0 3px 0 #0a0810,
-    0 0 16px var(--key-glow),
-    0 0 3px var(--key-rgb),
-    0 6px 14px rgba(0, 0, 0, 0.35);
+    0 0 12px var(--key-glow),
+    0 5px 10px rgba(0, 0, 0, 0.3);
+}
+
+.key.is-lit::before,
+.key.is-lit::after {
+  opacity: 0;
 }
 
 .key.is-override {
-  border-color: color-mix(in srgb, var(--key-rgb) 75%, #fff 15%);
+  border-color: color-mix(in srgb, var(--key-rgb) 70%, rgba(255, 255, 255, 0.28));
 }
 
 .key.is-override::before {
   opacity: 1;
 }
-

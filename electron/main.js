@@ -42,11 +42,7 @@ let mainWindow = null;
 
 function configureHid(ses) {
   ses.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(
-      permission === "hid" ||
-        permission === "clipboard-read" ||
-        permission === "clipboard-sanitized-write",
-    );
+    callback(permission === "hid");
   });
   ses.setDevicePermissionHandler((details) => details.deviceType === "hid");
   ses.on("select-hid-device", (event, details, callback) => {

@@ -23,9 +23,9 @@
   --radius: calc(20px * var(--ui));
   --radius-sm: calc(14px * var(--ui));
   --radius-xs: calc(10px * var(--ui));
-  --font-display: "Outfit", system-ui, sans-serif;
-  --font-body: "Nunito", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: system-ui, -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-body: system-ui, -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
   --titlebar: clamp(40px, 5vh, 50px);
   --sidebar: clamp(188px, 18vw, 240px);
   --icon-brand: clamp(36px, 3.4vw, 50px);

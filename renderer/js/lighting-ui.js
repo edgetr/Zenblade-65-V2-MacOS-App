@@ -2,22 +2,21 @@ import {
   categorySelectionState,
   LIGHT_CATEGORIES,
   LIGHT_MODES,
+  modeById,
 } from "./lighting-modes.js";
 import {
-  clamp,
   hexToRgb,
-  hsvToRgb,
   rgbToCss,
   rgbToHex,
-  rgbToHsl,
   rgbToHsv,
 } from "./color.js";
-import { paintEffectPreview } from "./lighting-preview.js";
-import { normalizeLighting } from "./protocol.js";
+import {
+  colorSwatchPlan,
+  paintEffectPreview,
+} from "./lighting-preview.js";
+import { baseWireColor } from "./preview.js";
+import { lightingWirePreview, normalizeLighting } from "./protocol.js";
 import { $ } from "./dom.js";
-
-export const colorUiForMode = (hasColor, colorUi) =>
-  hasColor && colorUi === "hidden" ? "simple" : colorUi;
 
 export const lightingColorUpdate = (rgb) => {
   const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
@@ -35,45 +34,22 @@ const lightingKeys = [
 export const lightingMatches = (left, right) =>
   !!left && !!right && lightingKeys.every((key) => left[key] === right[key]);
 export const lightingIsDirty = (lighting, baseline) =>
-  !!baseline && !lightingMatches(lighting, baseline);
+  !baseline || !lightingMatches(lighting, baseline);
 
-export function wheelGeometry(size) {
-  const center = size / 2;
-  const hueRadius = center - 5;
-  return { center, hueRadius, saturationRadius: hueRadius - 14 };
-}
-
-export function wheelMarkerPosition(lighting, size) {
-  const { center, saturationRadius } = wheelGeometry(size);
-  const angle = lighting.hue * Math.PI / 180;
-  const distance = lighting.saturation / 100 * saturationRadius;
-  return {
-    x: center + Math.cos(angle) * distance,
-    y: center + Math.sin(angle) * distance,
-  };
-}
-
-export function isWheelHitArea(x, y, size) {
-  return Math.hypot(x, y) <= wheelGeometry(size).hueRadius;
-}
-
-export function createLightingUi({ model, paint, toast, onChromeChange }) {
-  const { state, setLighting, setColorUi } = model;
+export function createLightingUi({ model, paint, onChromeChange, onLightingPaint }) {
+  const { state, setLighting } = model;
   const grid = $("modeGrid");
   const categoryGrid = $("modeCategories");
-  const wheel = $("colorWheel");
-  const ctx = wheel?.getContext("2d");
   let category =
     (LIGHT_MODES.find((mode) => mode.id === state.lighting.mode) ||
       LIGHT_MODES[0]).category;
-  let dragging = false;
-  let wheelImage = null;
+  let filterTouched = false;
+  let renderedCategory = null;
+  let renderedMode = null;
   let paintFrame = 0;
   let appliedBaseline = null;
 
-  const currentMode = () =>
-    LIGHT_MODES.find((mode) => mode.id === state.lighting.mode) ||
-    LIGHT_MODES[0];
+  const currentMode = () => modeById(state.lighting.mode);
   const allowsBaseColor = () => currentMode().usesColor;
   const schedulePaint = () => {
     if (paintFrame) return;
@@ -150,59 +126,38 @@ export function createLightingUi({ model, paint, toast, onChromeChange }) {
       button.setAttribute("role", "radio");
       grid.append(button);
     });
+    renderedCategory = category;
+    renderedMode = state.lighting.mode;
   }
 
-  function drawWheel() {
-    if (!wheel || !ctx) return;
-    const size = wheel.width;
-    const { center, hueRadius, saturationRadius } = wheelGeometry(size);
-    const image = wheelImage || ctx.createImageData(size, size);
-    if (!wheelImage) {
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const dx = x - center;
-          const dy = y - center;
-          const distance = Math.hypot(dx, dy);
-          const index = (y * size + x) * 4;
-          if (distance <= hueRadius) {
-            const hue = (Math.atan2(dy, dx) * 180 + 360) % 360;
-            const rgb = hsvToRgb(
-              hue,
-              distance > saturationRadius
-                ? 100
-                : distance / saturationRadius * 100,
-              100,
-            );
-            image.data.set([rgb.r, rgb.g, rgb.b, 255], index);
-          }
-        }
-      }
-      wheelImage = image;
+  function renderSwatches(plan) {
+    const root = $("colorSwatches");
+    if (!root) return;
+    const needsSwatches = plan.swatches.length > 0;
+    root.hidden = !needsSwatches;
+    root.setAttribute("aria-hidden", String(!needsSwatches));
+    if (!needsSwatches) {
+      root.innerHTML = "";
+      return;
     }
-    ctx.putImageData(image, 0, 0);
-    const angle = state.lighting.hue * Math.PI / 180;
-    const marker = wheelMarkerPosition(state.lighting, size);
-    const hueX = center + Math.cos(angle) * hueRadius;
-    const hueY = center + Math.sin(angle) * hueRadius;
-    ctx.beginPath();
-    ctx.arc(hueX, hueY, 5, 0, Math.PI * 2);
-    ctx.fillStyle = "#15111d";
-    ctx.fill();
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(marker.x, marker.y, 10, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(16, 13, 23, 0.88)";
-    ctx.fill();
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(marker.x, marker.y, 5, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(9, 7, 13, 0.95)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    const stamp = plan.swatches.map((s) => s.hex).join("|");
+    if (root.dataset.stamp === stamp && root.childElementCount === plan.swatches.length) {
+      // Nothing visual changed; preserve the existing Start/End labels.
+      return;
+    }
+    root.dataset.stamp = stamp;
+    root.innerHTML = "";
+    plan.swatches.forEach((swatch) => {
+      const item = document.createElement("div");
+      item.className = "color-swatch";
+      item.style.setProperty("--swatch-rgb", rgbToCss(swatch.rgb));
+      item.innerHTML =
+        `<span class="color-swatch__bubble" aria-hidden="true"></span>` +
+        `<span class="color-swatch__hex mono">${swatch.label} ${swatch.hex}</span>`;
+      item.setAttribute("title", `${swatch.label} ${swatch.hex}`);
+      item.setAttribute("aria-label", `${swatch.label} color ${swatch.hex}`);
+      root.append(item);
+    });
   }
 
   function visibility() {
@@ -211,27 +166,25 @@ export function createLightingUi({ model, paint, toast, onChromeChange }) {
     $("fieldBright").hidden = !params.includes("brightness");
     $("fieldSpeed").hidden = !mode.usesSpeed;
     const canEditColor = allowsBaseColor();
-    setColorUi(colorUiForMode(canEditColor, state.colorUi));
-    if (!canEditColor) setColorUi("hidden");
-    const advanced = canEditColor && state.colorUi === "advanced";
-    $("simpleColorControls").hidden = !canEditColor || advanced;
-    $("advancedColor").hidden = !advanced;
-    $("btnToggleAdvancedColor").hidden = !canEditColor;
-    $("btnToggleAdvancedColor").textContent = advanced
-      ? "Simple view"
-      : "Advanced…";
-    $("btnToggleAdvancedColor").setAttribute(
-      "aria-expanded",
-      String(advanced),
-    );
+    const plan = colorSwatchPlan(state.lighting, mode);
+    $("simpleColorControls").hidden = !canEditColor;
+    $("fieldColor").hidden = !plan.showPicker;
     $("colorUnavailable").hidden = canEditColor;
     $("colorUnavailable").textContent =
       "Effect preview uses the firmware’s multi-color palette.";
+    renderSwatches(plan);
   }
 
   function sync() {
     const lighting = state.lighting;
     const mode = currentMode();
+    // Startup/device/profile sync can replace the locally cached mode after
+    // the first render. Follow that real mode until the user chooses a filter,
+    // and always rebuild a grid whose selection state is stale.
+    if (!filterTouched && category !== mode.category) category = mode.category;
+    if (renderedCategory !== category || renderedMode !== lighting.mode) {
+      renderModes();
+    }
     const categoryState = categorySelectionState(category, lighting.mode);
     $("lightOn").checked = lighting.isOn;
     [["lightBright", "outBright", "brightness"], [
@@ -262,30 +215,20 @@ export function createLightingUi({ model, paint, toast, onChromeChange }) {
     filterNotice.textContent = categoryState.selectedVisible
       ? ""
       : `Selected: ${mode.name}. Showing ${category} effects.`;
-    const baseRgb = hsvToRgb(
-      lighting.hue,
-      lighting.saturation,
-      lighting.brightness,
-    );
+
+    // Readouts and previews use wire-quantized colour, matching firmware bytes.
+    const wire = lightingWirePreview(lighting);
+    const baseRgb = baseWireColor(lighting);
     const baseHex = rgbToHex(baseRgb).toUpperCase();
     if (document.activeElement !== $("lightColorPicker")) {
       $("lightColorPicker").value = baseHex;
     }
-    if (document.activeElement !== $("inputHex")) $("inputHex").value = baseHex;
-    const hsl = rgbToHsl(baseRgb.r, baseRgb.g, baseRgb.b);
-    $("rgbValue").textContent = `${baseRgb.r}, ${baseRgb.g}, ${baseRgb.b}`;
-    $("hslValue").textContent = `${hsl.h}, ${hsl.s}%, ${hsl.l}%`;
-    $("simpleColorReadout").textContent = `Base color ${baseHex}`;
-    $("colorWheelSwatch").style.setProperty(
-      "--selected-color",
-      rgbToCss(baseRgb),
-    );
-    $("colorWheelValue").textContent = baseHex;
-    $("colorWheelMeta").textContent =
-      `Hue ${lighting.hue}° · Saturation ${lighting.saturation}% · Value ${lighting.brightness}%`;
+    $("simpleColorReadout").textContent = baseHex;
+    $("simpleColorReadout").title =
+      `Hue ${wire.hue}° · Sat ${wire.saturation}% · Bright ${wire.brightness}%`;
     paintEffectPreview($("effectPreview"), lighting, mode);
     visibility();
-    if (state.colorUi === "advanced") drawWheel();
+    onLightingPaint?.(lighting);
     syncApplyState();
   }
 
@@ -298,7 +241,12 @@ export function createLightingUi({ model, paint, toast, onChromeChange }) {
   const chooseMode = (id, focus = false) => {
     const selected = LIGHT_MODES.find((mode) => mode.id === id);
     if (!selected) return;
-    update({ mode: selected.id });
+    setLighting({ mode: selected.id });
+    // The current filter may contain a disabled "Selected: …" row. Rebuild
+    // the list so a stale out-of-filter selection never survives a choice.
+    renderModes();
+    sync();
+    schedulePaint();
     announce(`Selected ${selected.name}.`);
     if (focus) grid.querySelector(`[data-mode="${selected.id}"]`)?.focus();
   };
@@ -326,6 +274,7 @@ export function createLightingUi({ model, paint, toast, onChromeChange }) {
   categoryGrid.addEventListener("click", (event) => {
     const button = event.target.closest(".mode-category");
     if (!button) return;
+    filterTouched = true;
     category = button.dataset.category;
     renderModes();
     sync();
@@ -335,6 +284,7 @@ export function createLightingUi({ model, paint, toast, onChromeChange }) {
     "keydown",
     (event) =>
       moveRadio(event, ".mode-category", (button) => {
+        filterTouched = true;
         category = button.dataset.category;
         renderModes();
         sync();
@@ -373,73 +323,6 @@ export function createLightingUi({ model, paint, toast, onChromeChange }) {
     const rgb = hexToRgb(event.target.value);
     if (rgb) setColor(rgb);
   });
-  $("btnToggleAdvancedColor").addEventListener("click", () => {
-    const wasAdvanced = state.colorUi === "advanced";
-    setColorUi(wasAdvanced ? "simple" : "advanced");
-    sync();
-    if (wasAdvanced) $("btnToggleAdvancedColor").focus();
-    else wheel?.focus();
-  });
-  const applyHex = () => {
-    const input = $("inputHex");
-    const rgb = hexToRgb(input.value);
-    input.classList.toggle("is-invalid", !rgb);
-    input.setAttribute("aria-invalid", String(!rgb));
-    if (rgb) setColor(rgb);
-    else toast("Enter a valid HEX color", "error");
-  };
-  $("inputHex").addEventListener("change", applyHex);
-  $("inputHex").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") applyHex();
-  });
-  function wheelEvent(event, allowOutside = false) {
-    const rect = wheel.getBoundingClientRect();
-    const x = (event.clientX - rect.left) * wheel.width / rect.width -
-      wheel.width / 2;
-    const y = (event.clientY - rect.top) * wheel.height / rect.height -
-      wheel.height / 2;
-    if (!allowOutside && !isWheelHitArea(x, y, wheel.width)) return false;
-    const { saturationRadius } = wheelGeometry(wheel.width);
-    const distance = Math.min(saturationRadius, Math.hypot(x, y));
-    update({
-      hue: Math.round((Math.atan2(y, x) * 180 + 360) % 360),
-      saturation: Math.round(distance / saturationRadius * 100),
-    });
-    return true;
-  }
-  if (wheel) {
-    wheel.addEventListener("pointerdown", (event) => {
-      if (!wheelEvent(event)) return;
-      dragging = true;
-      wheel.setPointerCapture(event.pointerId);
-    });
-    wheel.addEventListener(
-      "pointermove",
-      (event) => dragging && wheelEvent(event, true),
-    );
-    wheel.addEventListener("pointerup", () => dragging = false);
-    wheel.addEventListener("pointercancel", () => dragging = false);
-    wheel.addEventListener("keydown", (event) => {
-      const delta = event.shiftKey ? 5 : 1;
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        event.preventDefault();
-        update({
-          hue: (state.lighting.hue +
-            (event.key === "ArrowRight" ? delta : -delta) + 360) % 360,
-        });
-      } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        event.preventDefault();
-        update({
-          saturation: clamp(
-            state.lighting.saturation +
-              (event.key === "ArrowUp" ? delta : -delta),
-            0,
-            100,
-          ),
-        });
-      }
-    });
-  }
 
   return {
     sync,

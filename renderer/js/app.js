@@ -34,18 +34,18 @@ function syncChrome() {
   const running = gate.running;
   const deviceBusy = !connected || running;
   const lightingDirty = ui.lighting?.isDirty() ?? false;
+  const hasKeySelected = !!state.selectedKey;
 
   $("btnRefresh").disabled = deviceBusy;
-  document.querySelectorAll(".nav__btn[data-panel]").forEach((button) => {
-    if (button.dataset.panel !== "keyboard") button.disabled = !connected;
-  });
   $("btnApplyLighting").disabled = deviceBusy || !lightingDirty;
   $("btnApplyActuation").disabled = deviceBusy;
-  $("btnApplyKey").disabled = deviceBusy;
-  $("btnResetKey").disabled = deviceBusy;
+  $("btnApplyKey").disabled = running || !hasKeySelected;
+  $("btnResetKey").disabled = running || !hasKeySelected;
   document.querySelectorAll(".profile-card").forEach((card) => {
-    card.disabled = deviceBusy;
+    card.disabled = running;
   });
+  $("btnApplyKey").textContent = connected ? "Apply Key" : "Save Key";
+  $("btnResetKey").textContent = "Reset Key";
   document.documentElement.toggleAttribute("data-device-busy", running);
 }
 
@@ -67,18 +67,19 @@ function setConnected(on, info) {
 
 const board = createBoard({
   state,
-  onSelect: (code) => editor.open(code),
-  onPaint: () => {
-    ui.lighting?.sync();
-    applyTheme(state.lighting);
+  onSelect: (code) => {
+    editor.open(code);
+    syncChrome();
   },
+  // Intentionally no onPaint → lighting.sync(): selection/override paints must
+  // not rewrite the 67-key Lights preview. Theme is applied from lighting.sync.
 });
 
 ui.lighting = createLightingUi({
   model,
   paint: board.paint,
-  toast,
   onChromeChange: syncChrome,
+  onLightingPaint: () => applyTheme(state.lighting),
 });
 const lighting = ui.lighting;
 
@@ -99,8 +100,9 @@ const editor = createKeyEditor({
   model,
   paint: board.paint,
   toast,
+  connected: () => state.connected,
   onApply: async () => {
-    if (!kb.connected) throw new Error("Connect to apply this to the keyboard");
+    if (!kb.connected) return;
     return gate.run("Key update", writeFeel);
   },
 });
@@ -108,8 +110,10 @@ const editor = createKeyEditor({
 function syncAll() {
   lighting.sync();
   editor.syncFeel();
+  if (!state.selectedKey) editor.clear();
   ui.profiles?.sync();
   board.paint();
+  syncChrome();
 }
 
 const profileController = createProfileController({
@@ -138,8 +142,10 @@ async function connect(existing, { quiet = false } = {}) {
   return gate.run("Connection", async () => {
     const info = await kb.connect(existing);
     setConnected(true, info);
-    toast("Connected", "ok");
-    return refresh({ restoreFeel: true });
+    // quiet: suppress automatic startup Connected/Synced success toasts.
+    // Errors and user-initiated Refresh still announce normally.
+    if (!quiet) toast("Connected", "ok");
+    return refresh({ restoreFeel: true, quiet });
   }).catch((error) => {
     if (error.message?.includes("waiting for the current device operation")) {
       return;
@@ -172,4 +178,5 @@ installBootstrapUi({
   disconnect,
   setConnected,
   syncChrome,
+  writeFeel,
 });

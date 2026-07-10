@@ -60,7 +60,7 @@ export function createProfileController({
     }
   }
 
-  async function refresh({ restoreFeel = false } = {}) {
+  async function refresh({ restoreFeel = false, quiet = false } = {}) {
     if (!kb.connected) throw new Error("Connect a Zenblade first");
     const result = {
       profileOk: false,
@@ -99,7 +99,8 @@ export function createProfileController({
     sync();
     if (result.profileOk && result.lightingOk && result.feelOk) {
       setSyncIncomplete(null);
-      toast("Synced", "ok");
+      // quiet suppresses automatic startup success; user Refresh still toasts.
+      if (!quiet) toast("Synced", "ok");
     } else if (!result.profileOk) {
       setSyncIncomplete(null);
       toast(
