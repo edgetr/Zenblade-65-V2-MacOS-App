@@ -1,5 +1,6 @@
 import { deepClone } from "./store.js";
 import { pickZenbladeDevice } from "./protocol.js";
+import { $ } from "./dom.js";
 
 export function installBootstrapUi({
   kb,
@@ -12,10 +13,9 @@ export function installBootstrapUi({
   refresh,
   connect,
   disconnect,
-  writeFeel,
   setConnected,
+  syncChrome,
 }) {
-  const $ = (id) => document.getElementById(id);
   const setDiscoveryVisible = (visible) => {
     $("deviceDiscovery").hidden = !visible;
   };
@@ -41,8 +41,6 @@ export function installBootstrapUi({
       gate.run("Refresh", () => refresh({ restoreFeel: true })).catch(() => {}),
   );
   $("btnChooseKeyboard").addEventListener("click", async () => {
-    // This click is the user activation WebHID requires on systems that do
-    // not permit a first-launch picker during automatic discovery.
     setDiscoveryVisible(false);
     const result = await connect();
     if (!result) setDiscoveryVisible(true);
@@ -99,39 +97,43 @@ export function installBootstrapUi({
   }
   window.zenShell?.onReconnect?.(() =>
     state.connected
-      ? gate.run("Reconnect refresh", () => refresh({ restoreFeel: true })).catch(() => {})
+      ? gate.run("Reconnect refresh", () => refresh({ restoreFeel: true }))
+        .catch(() => {})
       : connect()
   );
 
-  window.__zenTest = {
-    getState: () => ({
-      connected: state.connected,
-      profile: state.profile,
-      lighting: { ...state.lighting },
-      actuation: { ...state.actuation },
-      keyOverrides: deepClone(state.keyOverrides),
-      store: deepClone(model.store),
-      info: kb.info,
-    }),
-    connect,
-    refresh: () => refresh(),
-    saveStore: () => model.flush(),
-    async roundTripColor(hue = 0, saturation = 100) {
-      model.setLighting({
-        hue,
-        saturation,
-        mode: 1,
-        isOn: true,
-        brightness: 80,
-      });
-      await kb.writeLighting(state.lighting);
-      return kb.readLighting();
-    },
-  };
+  if (new URLSearchParams(location.search).has("test")) {
+    window.__zenTest = {
+      getState: () => ({
+        connected: state.connected,
+        profile: state.profile,
+        lighting: { ...state.lighting },
+        actuation: { ...state.actuation },
+        keyOverrides: deepClone(state.keyOverrides),
+        store: deepClone(model.store),
+        info: kb.info,
+      }),
+      connect,
+      refresh: () => refresh(),
+      saveStore: () => model.flush(),
+      async roundTripColor(hue = 0, saturation = 100) {
+        model.setLighting({
+          hue,
+          saturation,
+          mode: 1,
+          isOn: true,
+          brightness: 80,
+        });
+        await kb.writeLighting(state.lighting);
+        return kb.readLighting();
+      },
+    };
+  }
 
   setActivePanel(
     document.querySelector(".nav__btn.is-active")?.dataset.panel || "keyboard",
   );
+  syncChrome?.();
 
   (async () => {
     if (!navigator.hid) return toast("WebHID unavailable", "error");
@@ -139,12 +141,7 @@ export function installBootstrapUi({
     if (known) {
       const result = await connect(known);
       setDiscoveryVisible(!result);
-    }
-    // On first launch there is no approved device for getDevices() to return.
-    // Electron/WebHID may allow this filtered request; if it requires a user
-    // gesture, connect() deliberately fails quietly and the Device menu can
-    // retry it later.
-    else {
+    } else {
       const result = await connect(undefined, { quiet: true });
       setDiscoveryVisible(!result);
     }

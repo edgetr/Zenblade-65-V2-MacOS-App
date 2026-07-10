@@ -4,8 +4,8 @@ import {
   keyOverrideDisplayColor,
 } from "./preview.js";
 import { rgbToCss } from "./color.js";
+import { $ } from "./dom.js";
 export function createBoard({ state, onSelect, onPaint } = {}) {
-  const $ = (id) => document.getElementById(id);
   let paintRaf = 0, scaleRaf = 0;
   const last = new WeakMap();
   function render(root, interactive = false) {

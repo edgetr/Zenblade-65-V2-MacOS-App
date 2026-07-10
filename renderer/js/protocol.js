@@ -1,8 +1,10 @@
-export const VID = 0x3662,
-  PIDS = [0x1001, 0x1002],
-  PROFILE_COUNT = 3,
-  KEY_COUNT = 67,
-  LIGHT_MODE_MAX = 44;
+import deviceIds from "../../shared/device-ids.json" with { type: "json" };
+
+export const VID = deviceIds.vendorId;
+export const PIDS = deviceIds.productIds;
+export const PROFILE_COUNT = 3;
+export const KEY_COUNT = 67;
+export const LIGHT_MODE_MAX = 44;
 const finite = (value, fallback) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
 const boundedInteger = (value, low, high, fallback) =>

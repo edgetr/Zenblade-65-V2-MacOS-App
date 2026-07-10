@@ -1,15 +1,14 @@
 import {
   deepClone,
-  defaultActuation,
-  defaultLighting,
   loadStore,
+  normalizeActuation,
   saveStore,
 } from "./store.js";
 import { normalizeLighting, PROFILE_COUNT } from "./protocol.js";
-export { deepClone } from "./store.js";
+
 export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
-  const store = loadStore(storage, validCodes),
-    current = store.profiles[store.activeProfile];
+  const store = loadStore(storage, validCodes);
+  const current = store.profiles[store.activeProfile];
   const state = {
     connected: false,
     profile: store.activeProfile,
@@ -21,7 +20,9 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     colorUi: "simple",
     syncIncomplete: null,
   };
-  let timer = 0, saved = "";
+  let timer = 0;
+  let saved = "";
+
   const snapshot = () => {
     store.profiles[state.profile] = {
       lighting: deepClone(state.lighting),
@@ -31,6 +32,7 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     };
     store.activeProfile = state.profile;
   };
+
   const persist = (immediate = false) => {
     clearTimeout(timer);
     const write = () => {
@@ -41,20 +43,37 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
         saved = json;
       }
     };
-    immediate ? write() : timer = setTimeout(write, debounceMs);
+    if (immediate) write();
+    else timer = setTimeout(write, debounceMs);
   };
+
   const setLighting = (partial, { persist: shouldPersist = true } = {}) => {
     state.lighting = normalizeLighting(partial, state.lighting);
     if (shouldPersist) persist();
     return state.lighting;
   };
+
   const setActuation = (partial, { persist: shouldPersist = true } = {}) => {
-    Object.assign(state.actuation, partial);
+    state.actuation = normalizeActuation(partial, state.actuation);
     if (shouldPersist) persist();
     return state.actuation;
   };
+
+  const setColorUi = (mode) => {
+    state.colorUi = mode === "advanced"
+      ? "advanced"
+      : mode === "hidden"
+      ? "hidden"
+      : "simple";
+    return state.colorUi;
+  };
+
   const setOverride = (code, values, notes) => {
-    state.keyOverrides[code] = { press: values.press, release: values.release };
+    const normalized = normalizeActuation(values, state.actuation);
+    state.keyOverrides[code] = {
+      press: normalized.press,
+      release: normalized.release,
+    };
     if (notes) {
       state.appNotes[code] = {
         macro: notes.macro || "",
@@ -63,11 +82,13 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     }
     persist();
   };
+
   const resetOverride = (code) => {
     delete state.keyOverrides[code];
     delete state.appNotes[code];
     persist();
   };
+
   const selectProfile = (index) => {
     snapshot();
     const profileIndex = Math.max(
@@ -84,11 +105,13 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     persist(true);
     return state;
   };
+
   return {
     state,
     store,
     setLighting,
     setActuation,
+    setColorUi,
     setOverride,
     resetOverride,
     selectProfile,

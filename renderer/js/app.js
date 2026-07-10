@@ -10,8 +10,8 @@ import { createProfileController } from "./profile-controller.js";
 import { applyTheme } from "./theme.js";
 import { initHelpTips } from "./help-tips.js";
 import { installBootstrapUi } from "./bootstrap-ui.js";
+import { $ } from "./dom.js";
 
-const $ = (id) => document.getElementById(id);
 const kb = new ZenbladeDevice();
 const model = createModel({ validCodes: CODE_TO_MATRIX_INDEX });
 const { state } = model;
@@ -26,49 +26,62 @@ function toast(message, kind = "") {
   clearTimeout(el._timer);
   el._timer = setTimeout(() => el.classList.remove("is-show"), 2800);
 }
-function deviceControls() {
-  return [
-    "btnRefresh",
-    "btnApplyLighting",
-    "btnApplyActuation",
-    "btnApplyKey",
-    "btnResetKey",
-    ...document.querySelectorAll(".profile-card"),
-  ].map((x) => typeof x === "string" ? $(x) : x);
+
+const ui = { lighting: null, profiles: null };
+
+function syncChrome() {
+  const connected = state.connected;
+  const running = gate.running;
+  const deviceBusy = !connected || running;
+  const lightingDirty = ui.lighting?.isDirty() ?? false;
+
+  $("btnRefresh").disabled = deviceBusy;
+  document.querySelectorAll(".nav__btn[data-panel]").forEach((button) => {
+    if (button.dataset.panel !== "keyboard") button.disabled = !connected;
+  });
+  $("btnApplyLighting").disabled = deviceBusy || !lightingDirty;
+  $("btnApplyActuation").disabled = deviceBusy;
+  $("btnApplyKey").disabled = deviceBusy;
+  $("btnResetKey").disabled = deviceBusy;
+  document.querySelectorAll(".profile-card").forEach((card) => {
+    card.disabled = deviceBusy;
+  });
+  document.documentElement.toggleAttribute("data-device-busy", running);
 }
-let lighting;
+
 const gate = new DeviceOperationGate({
   toast,
-  controls: deviceControls,
-  afterRun: () => lighting?.syncApplyState(),
+  onStateChange: syncChrome,
 });
+
 function setConnected(on, info) {
-  if (!on) gate.preserveCurrentState();
   state.connected = on;
-  $("btnRefresh").disabled = !on;
-  document.querySelectorAll(".nav__btn[data-panel]").forEach((b) => {
-    if (b.dataset.panel !== "keyboard") b.disabled = !on;
-  });
-  document.querySelectorAll(
-    "#btnApplyLighting, #btnApplyActuation, .profile-card",
-  ).forEach((control) => control.disabled = !on || gate.running);
   $("statName").textContent = info?.productName || "—";
   $("statPid").textContent = info
     ? `0x${info.productId.toString(16).padStart(4, "0")}`
     : "—";
-  if (!on) lighting?.clearAppliedBaseline();
-  else lighting?.syncApplyState();
-  profiles.sync();
+  if (!on) ui.lighting?.clearAppliedBaseline();
+  syncChrome();
+  ui.profiles?.sync();
 }
+
 const board = createBoard({
   state,
   onSelect: (code) => editor.open(code),
   onPaint: () => {
-    lighting?.sync();
+    ui.lighting?.sync();
     applyTheme(state.lighting);
   },
 });
-lighting = createLightingUi({ model, paint: board.paint, toast, connected: () => state.connected });
+
+ui.lighting = createLightingUi({
+  model,
+  paint: board.paint,
+  toast,
+  onChromeChange: syncChrome,
+});
+const lighting = ui.lighting;
+
 async function writeFeel() {
   const values = buildActuationMatrix(
     state,
@@ -81,6 +94,7 @@ async function writeFeel() {
     ...values,
   });
 }
+
 const editor = createKeyEditor({
   model,
   paint: board.paint,
@@ -90,20 +104,36 @@ const editor = createKeyEditor({
     return gate.run("Key update", writeFeel);
   },
 });
-let profiles;
+
 function syncAll() {
   lighting.sync();
   editor.syncFeel();
-  profiles.sync();
+  ui.profiles?.sync();
   board.paint();
 }
+
 const profileController = createProfileController({
-  kb, model, state, gate, writeFeel, sync: syncAll, toast,
+  kb,
+  model,
+  state,
+  gate,
+  writeFeel,
+  sync: syncAll,
+  toast,
   onLightingRead: lighting.markApplied,
   onLightingApplied: lighting.markApplied,
+  onSyncChange: () => ui.profiles?.sync(),
 });
-profiles = createProfilesUi({ model, connected: () => state.connected, onSelect: profileController.select });
+
+ui.profiles = createProfilesUi({
+  model,
+  connected: () => state.connected,
+  onSelect: profileController.select,
+  onRetry: profileController.retry,
+});
+
 const refresh = profileController.refresh;
+
 async function connect(existing, { quiet = false } = {}) {
   return gate.run("Connection", async () => {
     const info = await kb.connect(existing);
@@ -111,20 +141,21 @@ async function connect(existing, { quiet = false } = {}) {
     toast("Connected", "ok");
     return refresh({ restoreFeel: true });
   }).catch((error) => {
-    if (error.message?.includes("waiting for the current device operation")) return;
+    if (error.message?.includes("waiting for the current device operation")) {
+      return;
+    }
     setConnected(false, null);
-    // A first-launch WebHID request may be rejected because the runtime has
-    // no user activation or no keyboard is present. That is an expected
-    // discovery outcome, not an error the user needs to dismiss.
     if (!quiet) toast(error.message || String(error), "error");
   });
 }
+
 async function disconnect() {
   model.flush();
   await kb.disconnect();
   setConnected(false, null);
   toast("Disconnected");
 }
+
 initHelpTips();
 syncAll();
 setConnected(false, null);
@@ -139,6 +170,6 @@ installBootstrapUi({
   refresh,
   connect,
   disconnect,
-  writeFeel,
   setConnected,
+  syncChrome,
 });

@@ -1,0 +1,93 @@
+:root {
+  --bg-0: #100e18;
+  --bg-1: #16131f;
+  --bg-2: #1e1a2a;
+  --bg-3: #2a2438;
+  --bg-4: #3a3250;
+  --line: rgba(255, 230, 255, 0.08);
+  --line-strong: rgba(255, 230, 255, 0.16);
+  --fg: #f6f0ff;
+  --fg-dim: rgba(246, 240, 255, 0.62);
+  --fg-mute: rgba(246, 240, 255, 0.38);
+  --accent: #b8f5c8;
+  --accent-hot: #d4ffe0;
+  --accent-2: #c9b6ff;
+  --accent-dim: rgba(184, 245, 200, 0.14);
+  --accent-glow: rgba(184, 245, 200, 0.35);
+  --accent-rgb: 184, 245, 200;
+  --override-rgb: 201, 182, 255;
+  --pink: #ffb3d9;
+  --danger: #ff8a9a;
+  --ok: #7dffc4;
+  --ui: clamp(0.88, 0.82 + 0.12vw, 1.12);
+  --radius: calc(20px * var(--ui));
+  --radius-sm: calc(14px * var(--ui));
+  --radius-xs: calc(10px * var(--ui));
+  --font-display: "Outfit", system-ui, sans-serif;
+  --font-body: "Nunito", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --titlebar: clamp(40px, 5vh, 50px);
+  --sidebar: clamp(188px, 18vw, 240px);
+  --icon-brand: clamp(36px, 3.4vw, 50px);
+  --space: clamp(12px, 1.5vw, 20px);
+  --space-lg: clamp(16px, 2.2vw, 32px);
+  --text: clamp(13px, 0.85vw + 8px, 15px);
+  --text-sm: clamp(11px, 0.65vw + 7px, 13.5px);
+  --text-xs: clamp(9.5px, 0.5vw + 6px, 11.5px);
+  --text-title: clamp(22px, 1.5vw + 12px, 30px);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-card:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 14px 36px rgba(0, 0, 0, 0.35);
+  --key-u: clamp(18px, 2.8vw, 52px);
+  --key-gap: clamp(2px, 0.35vw, 6px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-0);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: var(--text);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 0% 0%, rgba(var(--accent-rgb), 0.12), transparent 55%),
+    radial-gradient(ellipse 55% 45% at 100% 100%, rgba(var(--accent-rgb), 0.08), transparent 50%),
+    radial-gradient(ellipse 40% 30% at 80% 10%, rgba(201, 182, 255, 0.08), transparent 45%),
+    linear-gradient(165deg, #14101c 0%, var(--bg-0) 50%, #0e0c14 100%);
+  z-index: 0;
+  transition: background 0.35s var(--ease);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  z-index: 0;
+}
+

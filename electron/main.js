@@ -9,15 +9,18 @@ const {
   nativeImage,
 } = require("electron");
 const path = require("path");
+const {
+  vendorId: PWNAGE_VID,
+  productIds: ZENBLADE_PID_LIST,
+} = require("../shared/device-ids.json");
+
+const ZENBLADE_PIDS = new Set(ZENBLADE_PID_LIST);
 
 if (typeof app.setName === "function") {
   app.setName("Zenblade");
 }
 
 const isDev = process.argv.includes("--dev");
-const PWNAGE_VID = 0x3662;
-const ZENBLADE_PIDS = new Set([0x1001, 0x1002]);
-
 const ICON_PNG = path.join(__dirname, "..", "build", "icon.png");
 const ICON_ICNS = path.join(__dirname, "..", "build", "icon.icns");
 
@@ -42,26 +45,17 @@ function configureHid(ses) {
     callback(
       permission === "hid" ||
         permission === "clipboard-read" ||
-        permission === "clipboard-sanitized-write"
+        permission === "clipboard-sanitized-write",
     );
   });
   ses.setDevicePermissionHandler((details) => details.deviceType === "hid");
   ses.on("select-hid-device", (event, details, callback) => {
     event.preventDefault();
     const list = details.deviceList || [];
-    if (!list.length) {
-      callback("");
-      return;
-    }
     const zen = list.find(
-      (d) => d.vendorId === PWNAGE_VID && ZENBLADE_PIDS.has(d.productId)
+      (d) => d.vendorId === PWNAGE_VID && ZENBLADE_PIDS.has(d.productId),
     );
-    if (zen) {
-      callback(zen.deviceId);
-      return;
-    }
-    const pwnage = list.find((d) => d.vendorId === PWNAGE_VID);
-    callback(pwnage ? pwnage.deviceId : list[0].deviceId);
+    callback(zen ? zen.deviceId : "");
   });
 }
 
@@ -170,7 +164,7 @@ function buildMenu() {
         role: "window",
         submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }],
       },
-    ])
+    ]),
   );
 }
 

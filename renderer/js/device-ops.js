@@ -1,10 +1,8 @@
 export class DeviceOperationGate {
-  constructor({ toast, controls = () => [], afterRun } = {}) {
+  constructor({ toast, onStateChange } = {}) {
     this.toast = toast;
-    this.controls = controls;
-    this.afterRun = afterRun;
+    this.onStateChange = onStateChange;
     this.running = false;
-    this.preserveCurrentState = this.preserveCurrentState.bind(this);
   }
   async run(label, task) {
     if (this.running) {
@@ -15,37 +13,19 @@ export class DeviceOperationGate {
       throw error;
     }
     this.running = true;
-    this.controlStateChanged = false;
-    const controls = [...this.controls()];
-    controls.forEach((el) => {
-      if (!el) return;
-      el.dataset.busyLabel ||= el.textContent;
-      el.disabled = true;
-      el.textContent = "Working…";
-    });
+    this.onStateChange?.();
     try {
       return await task();
     } finally {
       this.running = false;
-      controls.forEach((el) => {
-        if (!el) return;
-        // Connection changes can disable controls while an operation is in
-        // flight. In that case the caller owns the final disabled state.
-        if (!this.controlStateChanged) el.disabled = false;
-        if (el.dataset.busyLabel) el.textContent = el.dataset.busyLabel;
-      });
-      // A control may have state beyond connection/busy (for example a
-      // settings Apply button with a clean/dirty baseline). Restore it last.
-      this.afterRun?.();
+      this.onStateChange?.();
     }
   }
-  preserveCurrentState() {
-    this.controlStateChanged = true;
-  }
 }
+
 export function buildActuationMatrix(state, keyCount, indexForCode) {
-  const pressValues = Array(keyCount).fill(state.actuation.press),
-    releaseValues = Array(keyCount).fill(state.actuation.release);
+  const pressValues = Array(keyCount).fill(state.actuation.press);
+  const releaseValues = Array(keyCount).fill(state.actuation.release);
   for (const [code, value] of Object.entries(state.keyOverrides)) {
     const index = indexForCode(code);
     if (index != null) {
@@ -55,6 +35,7 @@ export function buildActuationMatrix(state, keyCount, indexForCode) {
   }
   return { pressValues, releaseValues };
 }
+
 export async function applyProfile(kb, state, writeFeel) {
   const result = { deviceProfileOk: false, lightingOk: false, feelOk: false };
   try {

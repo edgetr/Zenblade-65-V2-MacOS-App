@@ -33,6 +33,7 @@
     "files": [
       "electron/**/*",
       "renderer/**/*",
+      "shared/**/*",
       "build/icon.png",
       "build/icon.icns",
       "package.json"
