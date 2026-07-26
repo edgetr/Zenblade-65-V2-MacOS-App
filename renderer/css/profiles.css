@@ -9,11 +9,13 @@
   border: none;
   background: var(--bg-2);
   border-radius: var(--radius);
-  padding: 28px 16px;
-  min-height: 112px;
+  padding: 22px 16px;
+  min-height: 132px;
   cursor: pointer;
   color: var(--fg);
   display: flex;
+  flex-direction: column;
+  gap: 3px;
   align-items: center;
   justify-content: center;
   box-shadow: 0 0 0 1px var(--line), var(--shadow-card);
@@ -43,3 +45,23 @@
   letter-spacing: -0.04em;
 }
 
+.profile-card span,
+.profile-card small {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.profile-card span {
+  color: var(--fg-mute);
+}
+
+.profile-card small {
+  color: var(--fg-dim);
+}
+
+.profile-card.is-active small {
+  color: var(--accent);
+}

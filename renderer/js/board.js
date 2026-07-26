@@ -28,7 +28,7 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
           cols: row.length,
           rows: ROWS.length,
         });
-        key.tabIndex = interactive ? 0 : -1;
+        key.tabIndex = interactive && rowIndex === 0 && col === 0 ? 0 : -1;
         if (!interactive) key.setAttribute("aria-hidden", "true");
         else key.setAttribute("aria-label", item.code);
         line.append(key);
@@ -122,7 +122,41 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
   render($("keyboardBoard"), true);
   $("keyboardBoard").addEventListener("click", (e) => {
     const key = e.target.closest(".key");
-    if (key) onSelect?.(key.dataset.code);
+    if (key) {
+      $("keyboardBoard").querySelectorAll(".key").forEach((item) => {
+        item.tabIndex = item === key ? 0 : -1;
+      });
+      onSelect?.(key.dataset.code);
+    }
+  });
+  $("keyboardBoard").addEventListener("keydown", (event) => {
+    const key = event.target.closest(".key");
+    if (!key || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+      return;
+    }
+    const row = Number(key.dataset.row);
+    const col = Number(key.dataset.col);
+    let next = null;
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      const keys = [...$("keyboardBoard").children[row].querySelectorAll(".key")];
+      const delta = event.key === "ArrowLeft" ? -1 : 1;
+      next = keys[(col + delta + keys.length) % keys.length];
+    } else {
+      const nextRow = Math.max(0, Math.min(ROWS.length - 1, row + (
+        event.key === "ArrowUp" ? -1 : 1
+      )));
+      const targetKeys = [...$("keyboardBoard").children[nextRow].querySelectorAll(".key")];
+      next = targetKeys[Math.min(targetKeys.length - 1, Math.round(
+        col / Math.max(1, Number(key.dataset.cols) - 1) *
+          Math.max(1, targetKeys.length - 1),
+      ))];
+    }
+    if (!next || next === key) return;
+    event.preventDefault();
+    key.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus();
+    onSelect?.(next.dataset.code);
   });
   new ResizeObserver(scheduleScale).observe(
     $("keyboardBoard").closest(".board-wrap"),

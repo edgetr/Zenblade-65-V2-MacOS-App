@@ -34,6 +34,8 @@ export function installBootstrapUi({
       item.toggleAttribute("inert", !active);
       item.setAttribute("aria-hidden", String(!active));
     });
+    document.querySelector(".main__scroll")?.scrollTo({ top: 0 });
+    document.title = `${panel[0].toUpperCase()}${panel.slice(1)} — Zenblade`;
   };
 
   $("btnRefresh").addEventListener(
@@ -73,11 +75,48 @@ export function installBootstrapUi({
     board.paint();
     lighting.visibility();
   });
+  const navigate = (panel, { focus = true } = {}) => {
+    if (!["keyboard", "lighting", "actuation", "profiles"].includes(panel)) return;
+    setActivePanel(panel);
+    if (focus) document.querySelector(`[data-panel="${panel}"]`)?.focus();
+    board.scheduleScale();
+    board.paint();
+    lighting.visibility();
+  };
+  window.zenShell?.onNavigate?.((panel) => navigate(panel));
+  document.addEventListener("keydown", (event) => {
+    const command = event.metaKey || event.ctrlKey;
+    if (command && !event.altKey && !event.shiftKey && /^[1-4]$/.test(event.key)) {
+      event.preventDefault();
+      const panel = ["keyboard", "lighting", "actuation", "profiles"][
+        Number(event.key) - 1
+      ];
+      // macOS routes Command-number through the native View menu. Keeping the
+      // renderer fallback makes Control-number work on other platforms.
+      if (!event.metaKey) navigate(panel);
+      return;
+    }
+    if (command && event.key === "Enter") {
+      const activePanel = document.querySelector(".panel.is-active")?.id;
+      const apply = activePanel === "panel-lighting"
+        ? $("btnApplyLighting")
+        : activePanel === "panel-actuation"
+        ? $("btnApplyActuation")
+        : activePanel === "panel-keyboard" && state.selectedKey
+        ? $("btnApplyKey")
+        : null;
+      if (apply && !apply.disabled) {
+        event.preventDefault();
+        apply.click();
+      }
+    }
+  });
 
   kb.onStatus(({ type, detail }) => {
     if (type === "disconnected") {
       model.flush();
       setConnected(false, null);
+      setDiscoveryVisible(true);
     }
     if (type === "error") toast(detail || "Device error", "error");
   });
@@ -87,7 +126,9 @@ export function installBootstrapUi({
   });
   if (navigator.hid) {
     navigator.hid.addEventListener("disconnect", (event) => {
-      if (event.device === kb.device) disconnect();
+      if (event.device === kb.device) {
+        disconnect().finally(() => setDiscoveryVisible(true));
+      }
     });
     navigator.hid.addEventListener("connect", (event) => {
       const zenblade = pickZenbladeDevice([event.device]);
@@ -145,8 +186,9 @@ export function installBootstrapUi({
       const result = await connect(known, { quiet: true });
       setDiscoveryVisible(!result);
     } else {
-      const result = await connect(undefined, { quiet: true });
-      setDiscoveryVisible(!result);
+      // Never interrupt startup with a system device chooser. Discovery is a
+      // deliberate user action through the visible Choose keyboard button.
+      setDiscoveryVisible(true);
     }
   })().catch(() => {});
 }

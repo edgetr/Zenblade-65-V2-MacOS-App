@@ -105,6 +105,8 @@ function createWindow() {
 }
 
 function buildMenu() {
+  const navigate = (panel) =>
+    mainWindow?.webContents.send("app:navigate", panel);
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
@@ -136,6 +138,27 @@ function buildMenu() {
       {
         label: "View",
         submenu: [
+          {
+            label: "Keyboard",
+            accelerator: "CmdOrCtrl+1",
+            click: () => navigate("keyboard"),
+          },
+          {
+            label: "Lights",
+            accelerator: "CmdOrCtrl+2",
+            click: () => navigate("lighting"),
+          },
+          {
+            label: "Feel",
+            accelerator: "CmdOrCtrl+3",
+            click: () => navigate("actuation"),
+          },
+          {
+            label: "Profiles",
+            accelerator: "CmdOrCtrl+4",
+            click: () => navigate("profiles"),
+          },
+          { type: "separator" },
           { role: "reload" },
           { role: "toggleDevTools" },
           { type: "separator" },

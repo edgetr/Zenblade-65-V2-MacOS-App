@@ -44,8 +44,8 @@ function syncChrome() {
   document.querySelectorAll(".profile-card").forEach((card) => {
     card.disabled = running;
   });
-  $("btnApplyKey").textContent = connected ? "Apply Key" : "Save Key";
-  $("btnResetKey").textContent = "Reset Key";
+  $("btnApplyKey").textContent = connected ? "Apply key" : "Save key";
+  $("btnResetKey").textContent = "Use global feel";
   document.documentElement.toggleAttribute("data-device-busy", running);
 }
 

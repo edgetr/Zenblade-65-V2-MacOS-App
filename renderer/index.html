@@ -70,6 +70,14 @@
       <main class="main">
         <div class="main__scroll">
           <section class="panel is-active" id="panel-keyboard">
+            <div class="panel__intro">
+              <div>
+                <p class="panel__eyebrow">Keyboard</p>
+                <h2>Fine-tune individual keys</h2>
+                <p>Select a key, adjust its press and release points, then save it.</p>
+              </div>
+              <span class="shortcut-hint" aria-label="Keyboard shortcut Command 1">⌘1</span>
+            </div>
             <div class="connect-top">
               <div class="btn-row">
                 <button class="btn btn--ghost" id="btnRefresh" disabled>Refresh</button>
@@ -104,12 +112,12 @@
               <div class="card key-editor" id="keyEditor">
                 <div class="key-editor__empty" id="keyEditorEmpty">
                   <p class="card__title">Key Editor</p>
-                  <p class="key-editor__placeholder">Click a key on the board to edit it.</p>
+                  <p class="key-editor__placeholder">Select a key on the board to edit it. Use the arrow keys to move around.</p>
                 </div>
                 <div class="key-editor__body" id="keyEditorBody" hidden>
                   <div class="card-toolbar">
                     <h3 class="card__title" id="keyEditorTitle">Key</h3>
-                    <button type="button" class="btn btn--ghost btn--sm" id="btnResetKey">Reset Key</button>
+                    <button type="button" class="btn btn--ghost btn--sm" id="btnResetKey">Use global feel</button>
                   </div>
                   <div class="field">
                     <label for="keyPress">Press <output id="keyOutPress">15</output></label>
@@ -122,7 +130,7 @@
                     <input type="range" id="keyRelease" aria-label="Release point" min="1" max="40" value="15" />
                   </div>
                   <div class="btn-row">
-                    <button type="button" class="btn btn--primary" id="btnApplyKey">Apply Key</button>
+                    <button type="button" class="btn btn--primary" id="btnApplyKey">Save key</button>
                   </div>
                 </div>
               </div>
@@ -130,6 +138,14 @@
           </section>
 
           <section class="panel" id="panel-lighting">
+            <div class="panel__intro">
+              <div>
+                <p class="panel__eyebrow">Lights</p>
+                <h2>Set the mood</h2>
+                <p>Choose an effect, tune it, and apply when the preview feels right.</p>
+              </div>
+              <span class="shortcut-hint" aria-label="Keyboard shortcut Command 2">⌘2</span>
+            </div>
             <div class="lighting-layout">
               <div class="card lighting-effect-card">
                 <div class="card-toolbar">
@@ -179,9 +195,16 @@
           </section>
 
           <section class="panel" id="panel-actuation">
-            <div class="panel__head panel__head--compact">
-              <div class="panel__head-spacer"></div>
-              <button class="btn btn--primary" id="btnApplyActuation">Apply</button>
+            <div class="panel__intro">
+              <div>
+                <p class="panel__eyebrow">Feel</p>
+                <h2>Choose how every key responds</h2>
+                <p>Start with a preset, then adjust only if you need to.</p>
+              </div>
+              <div class="panel__actions">
+                <span class="shortcut-hint" aria-label="Keyboard shortcut Command 3">⌘3</span>
+                <button class="btn btn--primary" id="btnApplyActuation">Apply</button>
+              </div>
             </div>
             <div class="grid-3">
               <div class="card">
@@ -230,6 +253,14 @@
           </section>
 
           <section class="panel" id="panel-profiles">
+            <div class="panel__intro">
+              <div>
+                <p class="panel__eyebrow">Profiles</p>
+                <h2>Switch your whole setup</h2>
+                <p>Each profile remembers its own lights, feel, and per-key changes.</p>
+              </div>
+              <span class="shortcut-hint" aria-label="Keyboard shortcut Command 4">⌘4</span>
+            </div>
             <div class="card-toolbar profiles-toolbar">
               <h3 class="card__title">
                 Profiles
@@ -240,9 +271,9 @@
               </button>
             </div>
             <div class="profile-grid" id="profileGrid">
-              <button class="profile-card" data-profile="0" aria-label="Profile 1" aria-pressed="true"><strong>1</strong></button>
-              <button class="profile-card" data-profile="1" aria-label="Profile 2" aria-pressed="false"><strong>2</strong></button>
-              <button class="profile-card" data-profile="2" aria-label="Profile 3" aria-pressed="false"><strong>3</strong></button>
+              <button class="profile-card" data-profile="0" aria-label="Profile 1" aria-pressed="true"><span>Profile</span><strong>1</strong><small>Current</small></button>
+              <button class="profile-card" data-profile="1" aria-label="Profile 2" aria-pressed="false"><span>Profile</span><strong>2</strong><small>Switch</small></button>
+              <button class="profile-card" data-profile="2" aria-label="Profile 3" aria-pressed="false"><span>Profile</span><strong>3</strong><small>Switch</small></button>
             </div>
           </section>
         </div>

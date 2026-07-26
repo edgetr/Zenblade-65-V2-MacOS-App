@@ -2,6 +2,14 @@ import { $ } from "./dom.js";
 
 export function createKeyEditor({ model, paint, onApply, toast, connected }) {
   const { state, setOverride, resetOverride, setActuation } = model;
+  const setRangeProgress = (input) => {
+    const min = Number(input.min);
+    const max = Number(input.max);
+    input.style.setProperty(
+      "--range-progress",
+      `${(Number(input.value) - min) / (max - min) * 100}%`,
+    );
+  };
 
   function open(code) {
     state.selectedKey = code;
@@ -16,6 +24,7 @@ export function createKeyEditor({ model, paint, onApply, toast, connected }) {
     ]].forEach(([input, out, value]) => {
       $(input).value = value;
       $(out).textContent = value;
+      setRangeProgress($(input));
     });
     paint();
   }
@@ -31,7 +40,10 @@ export function createKeyEditor({ model, paint, onApply, toast, connected }) {
     ([id, out]) =>
       $(id).addEventListener(
         "input",
-        (e) => $(out).textContent = e.target.value,
+        (e) => {
+          $(out).textContent = e.target.value;
+          setRangeProgress(e.target);
+        },
       ),
   );
 
@@ -74,6 +86,7 @@ export function createKeyEditor({ model, paint, onApply, toast, connected }) {
       $(id).addEventListener("input", (e) => {
         setActuation({ [key]: +e.target.value });
         $(out).textContent = e.target.value;
+        setRangeProgress(e.target);
         if (state.selectedKey && !state.keyOverrides[state.selectedKey]) {
           open(state.selectedKey);
         }
@@ -104,8 +117,10 @@ export function createKeyEditor({ model, paint, onApply, toast, connected }) {
     const a = state.actuation;
     $("actPress").value = a.press;
     $("outPress").textContent = a.press;
+    setRangeProgress($("actPress"));
     $("actRelease").value = a.release;
     $("outRelease").textContent = a.release;
+    setRangeProgress($("actRelease"));
     $("actRT").checked = a.rapidTrigger;
   }
 

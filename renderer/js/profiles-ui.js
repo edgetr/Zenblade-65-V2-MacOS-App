@@ -9,6 +9,8 @@ export function createProfilesUi({ model, onSelect, onRetry, connected }) {
       const active = +el.dataset.profile === state.profile;
       el.classList.toggle("is-active", active);
       el.setAttribute("aria-pressed", String(active));
+      const status = el.querySelector("small");
+      if (status) status.textContent = active ? "Current" : "Switch";
     });
     const retry = $("btnRetrySync");
     if (retry) retry.hidden = !state.syncIncomplete;

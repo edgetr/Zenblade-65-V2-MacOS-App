@@ -29,7 +29,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 28px;
+  min-height: 40px;
 }
 
 .color-swatch__bubble {
@@ -81,7 +81,7 @@
 .mode-category {
   appearance: none;
   flex: 0 0 auto;
-  min-height: 30px;
+  min-height: 40px;
   padding: 0.35em 0.75em;
   border: 1px solid var(--line);
   border-radius: 999px;

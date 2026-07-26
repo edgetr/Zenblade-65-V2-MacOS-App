@@ -545,3 +545,44 @@ test("feel presets update sliders without a selection toast", () => {
   assert.match(keyEditor, /data-preset/);
   assert.doesNotMatch(keyEditor, /toast\(p/);
 });
+
+test("startup discovery waits for an explicit user choice", () => {
+  const source = readFileSync(
+    new URL("../renderer/js/bootstrap-ui.js", import.meta.url),
+    "utf8",
+  );
+  const startup = source.slice(source.indexOf("(async () => {"));
+  assert.match(startup, /if \(known\) \{\s*const result = await connect\(known/);
+  assert.doesNotMatch(startup, /connect\(undefined/);
+  assert.match(startup, /setDiscoveryVisible\(true\)/);
+});
+
+test("keyboard-first navigation uses one board tab stop and app shortcuts", () => {
+  const boardSource = readFileSync(
+    new URL("../renderer/js/board.js", import.meta.url),
+    "utf8",
+  );
+  const bootstrapSource = readFileSync(
+    new URL("../renderer/js/bootstrap-ui.js", import.meta.url),
+    "utf8",
+  );
+  const mainSource = readFileSync(
+    new URL("../electron/main.js", import.meta.url),
+    "utf8",
+  );
+  const preloadSource = readFileSync(
+    new URL("../electron/preload.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    boardSource,
+    /interactive && rowIndex === 0 && col === 0 \? 0 : -1/,
+  );
+  assert.match(boardSource, /"ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"/);
+  assert.match(bootstrapSource, /\^\[1-4\]\$/);
+  assert.match(bootstrapSource, /command && event\.key === "Enter"/);
+  assert.match(mainSource, /accelerator: "CmdOrCtrl\+1"/);
+  assert.match(mainSource, /accelerator: "CmdOrCtrl\+4"/);
+  assert.match(preloadSource, /onNavigate/);
+  assert.match(bootstrapSource, /onNavigate\?\.\(\(panel\) => navigate\(panel\)\)/);
+});
