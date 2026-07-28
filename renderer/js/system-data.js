@@ -5,10 +5,17 @@ export const DESKTOP_TRIGGER_CODES = Object.freeze(
 );
 
 export const CONTROL_KEYS = Object.freeze([
-  { code: "HOME", label: "Home" },
-  { code: "PGUP", label: "Page Up" },
-  { code: "PGDN", label: "Page Down" },
-  { code: "END", label: "End" },
+  { code: "HOME", label: "Home", accelerator: "Home", triggerCode: 104 },
+  { code: "PGUP", label: "Page Up", accelerator: "PageUp", triggerCode: 105 },
+  { code: "PGDN", label: "Page Down", accelerator: "PageDown", triggerCode: 106 },
+  { code: "END", label: "End", accelerator: "End", triggerCode: 107 },
+]);
+
+export const SYSTEM_MODIFIERS = Object.freeze([
+  { id: "Command", label: "⌘ Command" },
+  { id: "Control", label: "⌃ Control" },
+  { id: "Alt", label: "⌥ Option" },
+  { id: "Shift", label: "⇧ Shift" },
 ]);
 
 export const DEFAULT_KEYCODES = Object.freeze({
@@ -122,9 +129,17 @@ export function normalizeSystemProfile(raw = {}) {
   for (const value of Array.isArray(raw.keyActions) ? raw.keyActions : []) {
     const keyCode = text(value?.keyCode, 12).toUpperCase();
     const action = SYSTEM_ACTION_BY_ID.get(text(value?.action, 40));
+    const triggerType = value?.triggerType === "shortcut"
+      ? "shortcut"
+      : "replace";
+    const modifiers = SYSTEM_MODIFIERS
+      .map(({ id }) => id)
+      .filter((id) => Array.isArray(value?.modifiers) &&
+        value.modifiers.includes(id));
     if (
       !CONTROL_KEYS.some((key) => key.code === keyCode) ||
       !action ||
+      (triggerType === "shortcut" && (!action.hostAction || !modifiers.length)) ||
       usedKeys.has(keyCode)
     ) continue;
     usedKeys.add(keyCode);
@@ -132,6 +147,8 @@ export function normalizeSystemProfile(raw = {}) {
       id: text(value.id, 80) || uid(),
       keyCode,
       action: action.id,
+      triggerType,
+      modifiers,
       originalValue: Number.isFinite(Number(value.originalValue))
         ? clamp(Math.round(Number(value.originalValue)), 0, 0xffff)
         : null,
@@ -182,16 +199,18 @@ export function actionKeycode(actionId, hostIndex = 0) {
 
 export function buildKeyActionPlan(_previous = {}, next = {}) {
   const after = normalizeSystemProfile(next);
-  const current = new Map(after.keyActions.map((item, index) => [
-    item.keyCode,
-    { ...item, index },
-  ]));
+  const current = new Map(after.keyActions
+    .filter((item) => item.triggerType === "replace")
+    .map((item) => [item.keyCode, item]));
   return CONTROL_KEYS.map(({ code: keyCode }) => {
     const item = current.get(keyCode);
     return item && after.enabled
       ? {
         keyCode,
-        value: actionKeycode(item.action, item.index),
+        value: actionKeycode(
+          item.action,
+          CONTROL_KEYS.findIndex((key) => key.code === keyCode),
+        ),
         kind: "action",
       }
       : {
@@ -205,16 +224,32 @@ export function buildKeyActionPlan(_previous = {}, next = {}) {
 export function hostShortcutMappings(profile = {}) {
   const normalized = normalizeSystemProfile(profile);
   if (!normalized.enabled) return [];
-  return normalized.keyActions.flatMap((item, index) => {
+  return normalized.keyActions.flatMap((item) => {
     const action = SYSTEM_ACTION_BY_ID.get(item.action);
-    if (!action?.hostAction || !DESKTOP_TRIGGER_CODES[index]) return [];
+    const key = CONTROL_KEYS.find((candidate) => candidate.code === item.keyCode);
+    if (!action?.hostAction || !key) return [];
+    const accelerator = item.triggerType === "shortcut"
+      ? [...item.modifiers, key.accelerator].join("+")
+      : `F${13 + CONTROL_KEYS.findIndex(
+        (candidate) => candidate.code === item.keyCode,
+      )}`;
     return [{
-      accelerator: `F${13 + index}`,
+      accelerator,
       action: item.action,
       inputUid: normalized.audio.inputUid,
       outputUid: normalized.audio.outputUid,
     }];
   });
+}
+
+export function keyActionTriggerLabel(item = {}) {
+  const key = CONTROL_KEYS.find((candidate) => candidate.code === item.keyCode);
+  if (!key) return item.keyCode || "Key";
+  if (item.triggerType !== "shortcut") return key.label;
+  const modifierLabels = SYSTEM_MODIFIERS
+    .filter(({ id }) => item.modifiers?.includes(id))
+    .map(({ label }) => label.split(" ")[0]);
+  return `${modifierLabels.join("")}${key.label}`;
 }
 
 function ruleActive(rule, context) {

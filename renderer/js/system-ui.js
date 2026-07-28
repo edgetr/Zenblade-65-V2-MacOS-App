@@ -6,6 +6,7 @@ import {
   buildKeyActionPlan,
   createIndicatorPreset,
   hostShortcutMappings,
+  keyActionTriggerLabel,
 } from "./system-data.js";
 import { CODE_TO_MATRIX_INDEX, ROWS } from "./layout.js";
 import { $ } from "./dom.js";
@@ -61,7 +62,7 @@ export function createSystemUi({
   }
 
   async function configureShortcuts() {
-    const mappings = hostShortcutMappings(state.system);
+    const mappings = state.connected ? hostShortcutMappings(state.system) : [];
     const stamp = JSON.stringify(mappings);
     if (stamp === shortcutStamp) return;
     shortcutStamp = stamp;
@@ -84,9 +85,9 @@ export function createSystemUi({
     } else if (shortcutFailures.length) {
       node.textContent = `macOS reserved ${shortcutFailures.join(", ")}. Choose another control.`;
     } else if (!state.system.enabled) {
-      node.textContent = "Paused · sync restores the four keys to factory functions.";
+      node.textContent = "Paused · factory keys stay intact and shortcuts are inactive.";
     } else {
-      node.textContent = "Ready to sync this profile to the keyboard.";
+      node.textContent = "Ready to sync replacement keys and activate shortcuts.";
     }
   }
 
@@ -166,19 +167,24 @@ export function createSystemUi({
       row.className = "system-row";
       const key = document.createElement("span");
       key.className = "system-row__key";
-      key.textContent = keyLabel(item.keyCode);
+      key.textContent = keyActionTriggerLabel(item);
       const body = document.createElement("div");
       body.className = "system-row__body";
       const title = document.createElement("strong");
       title.textContent = action?.label || item.action;
       const detail = document.createElement("span");
-      detail.textContent = action?.detail || "";
+      detail.textContent = item.triggerType === "shortcut"
+        ? `${action?.detail || ""} · keeps ${keyLabel(item.keyCode)} unchanged`
+        : action?.detail || "";
       body.append(title, detail);
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "btn btn--ghost btn--sm";
-      remove.textContent = "Restore";
-      remove.setAttribute("aria-label", `Restore ${keyLabel(item.keyCode)}`);
+      remove.textContent = "Remove";
+      remove.setAttribute(
+        "aria-label",
+        `Remove ${keyActionTriggerLabel(item)} binding`,
+      );
       remove.addEventListener("click", () => {
         const next = systemDraft();
         next.keyActions = next.keyActions.filter((value) => value.id !== item.id);
@@ -322,16 +328,13 @@ export function createSystemUi({
     $("btnSyncSystemMappings").disabled = !state.connected || gate.running;
     $("btnAddSystemAction").disabled = state.system.keyActions.length >=
       CONTROL_KEYS.length;
-    $("btnApplyMeeting").disabled =
-      !state.system.audio.inputUid && !state.system.audio.outputUid;
-    $("btnToggleSystemMic").disabled = context.audio?.canMuteInput === false;
     const livebar = $("systemLivebar");
     livebar.classList.toggle("is-live", state.system.enabled);
     $("systemLiveTitle").textContent = state.system.enabled
       ? `Profile ${state.profile + 1} system controls are live`
       : `Profile ${state.profile + 1} system controls are paused`;
     $("systemLiveDetail").textContent = state.system.enabled
-      ? `${state.system.keyActions.length} key control${
+      ? `${state.system.keyActions.length} keyboard binding${
         state.system.keyActions.length === 1 ? "" : "s"
       } · ${state.system.indicators.rules.length} status rule${
         state.system.indicators.rules.length === 1 ? "" : "s"
@@ -354,12 +357,13 @@ export function createSystemUi({
     CONTROL_KEYS.filter((key) => !used.has(key.code)).forEach((key) =>
       $("systemActionKey").append(option(key.code, key.label))
     );
-    $("systemActionType").innerHTML = "";
-    SYSTEM_ACTIONS.forEach((action) =>
-      $("systemActionType").append(option(action.id, action.label))
-    );
+    $("systemActionTrigger").value = "replace";
+    document.querySelectorAll("[data-system-modifier]").forEach((input) => {
+      input.checked = false;
+    });
+    syncActionEditor();
     $("systemActionEditor").hidden = false;
-    $("systemActionKey").focus();
+    $("systemActionTrigger").focus();
   }
 
   function closeActionEditor() {
@@ -370,16 +374,69 @@ export function createSystemUi({
   function saveAction() {
     const keyCode = $("systemActionKey").value;
     const action = $("systemActionType").value;
-    if (!keyCode || !SYSTEM_ACTION_BY_ID.has(action)) return;
+    const triggerType = $("systemActionTrigger").value === "shortcut"
+      ? "shortcut"
+      : "replace";
+    const modifiers = [...document.querySelectorAll(
+      "[data-system-modifier]:checked",
+    )].map((input) => input.value);
+    const actionDefinition = SYSTEM_ACTION_BY_ID.get(action);
+    if (!keyCode || !actionDefinition) return;
+    if (triggerType === "shortcut" && !modifiers.length) {
+      toast("Choose at least one modifier", "error");
+      document.querySelector("[data-system-modifier]")?.focus();
+      return;
+    }
+    if (triggerType === "shortcut" && !actionDefinition.hostAction) return;
     const next = systemDraft();
     next.keyActions.push({
       id: crypto.randomUUID(),
       keyCode,
       action,
+      triggerType,
+      modifiers,
       originalValue: null,
     });
     setSystem({ keyActions: next.keyActions });
     closeActionEditor();
+  }
+
+  function syncActionEditor() {
+    const shortcut = $("systemActionTrigger").value === "shortcut";
+    $("systemModifierField").hidden = !shortcut;
+    const selectedAction = $("systemActionType").value;
+    const actions = SYSTEM_ACTIONS.filter((action) =>
+      !shortcut || action.hostAction
+    );
+    $("systemActionType").innerHTML = "";
+    actions.forEach((action) =>
+      $("systemActionType").append(option(action.id, action.label))
+    );
+    $("systemActionType").value = actions.some(
+      (action) => action.id === selectedAction,
+    )
+      ? selectedAction
+      : shortcut
+      ? "microphone-toggle"
+      : actions[0]?.id || "";
+    const action = SYSTEM_ACTION_BY_ID.get($("systemActionType").value);
+    if (shortcut) {
+      const modifiers = [...document.querySelectorAll(
+        "[data-system-modifier]:checked",
+      )].map((input) => input.value);
+      const trigger = keyActionTriggerLabel({
+        triggerType: "shortcut",
+        keyCode: $("systemActionKey").value,
+        modifiers,
+      });
+      $("systemActionHint").textContent = modifiers.length
+        ? `${trigger} runs ${action?.label || "this action"} while the keyboard is connected and Zenblade is in the background. The key keeps its normal function.`
+        : "Choose one or more modifiers. The key keeps its normal function.";
+    } else {
+      $("systemActionHint").textContent = action?.hostAction
+        ? `${keyLabel($("systemActionKey").value)} sends a private desktop trigger while Zenblade is running. Removing it restores the factory key.`
+        : `${keyLabel($("systemActionKey").value)} is replaced on the keyboard and works without the app window. Removing it restores the factory key.`;
+    }
   }
 
   function syncIndicatorEditorVisibility() {
@@ -452,32 +509,6 @@ export function createSystemUi({
     closeIndicatorEditor();
   }
 
-  async function perform(action) {
-    contextGeneration++;
-    clearTimeout(contextTimer);
-    try {
-      const audio = await window.zenShell?.performSystemAction?.({
-        action,
-        inputUid: state.system.audio.inputUid,
-        outputUid: state.system.audio.outputUid,
-      });
-      if (audio) {
-        context = { ...context, audio };
-        syncContext();
-      }
-      toast(
-        action === "microphone-toggle"
-          ? context.audio?.micMuted ? "Microphone muted" : "Microphone live"
-          : "Meeting setup applied",
-        "ok",
-      );
-    } catch (error) {
-      toast(error?.message || String(error), "error");
-    } finally {
-      scheduleContextRefresh();
-    }
-  }
-
   ROWS.flat().forEach((key) => $("indicatorKey").append(option(key.code, key.label || key.code)));
 
   $("systemEnabled").addEventListener("change", () => {
@@ -506,12 +537,16 @@ export function createSystemUi({
         id: crypto.randomUUID(),
         keyCode: "PGUP",
         action: "media-previous",
+        triggerType: "replace",
+        modifiers: [],
         originalValue: null,
       },
       {
         id: crypto.randomUUID(),
         keyCode: "PGDN",
         action: "media-next",
+        triggerType: "replace",
+        modifiers: [],
         originalValue: null,
       },
     );
@@ -526,9 +561,11 @@ export function createSystemUi({
   $("systemOutputDevice").addEventListener("change", () =>
     setSystem({ audio: { outputUid: $("systemOutputDevice").value } })
   );
-  $("btnApplyMeeting").addEventListener("click", () => perform("meeting-mode"));
-  $("btnToggleSystemMic").addEventListener("click", () =>
-    perform("microphone-toggle")
+  $("systemActionTrigger").addEventListener("change", syncActionEditor);
+  $("systemActionKey").addEventListener("change", syncActionEditor);
+  $("systemActionType").addEventListener("change", syncActionEditor);
+  document.querySelectorAll("[data-system-modifier]").forEach((input) =>
+    input.addEventListener("change", syncActionEditor)
   );
   $("btnAddIndicator").addEventListener("click", () => openIndicatorEditor());
   $("btnCancelIndicator").addEventListener("click", closeIndicatorEditor);
@@ -607,9 +644,5 @@ export function createSystemUi({
       mappingStatus = "";
       sync();
     },
-    report: () => ({
-      systemEnabled: state.system.enabled,
-      micMuted: context.audio?.micMuted === true,
-    }),
   };
 }

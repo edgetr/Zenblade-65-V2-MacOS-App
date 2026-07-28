@@ -171,6 +171,22 @@
   margin-bottom: 14px;
 }
 
+.system-config-note,
+.system-action-hint {
+  margin: 0;
+  color: var(--fg-mute);
+  font-size: 11px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.system-config-note {
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: rgba(var(--accent-rgb), 0.055);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.1);
+}
+
 .mic-pill {
   display: inline-flex;
   align-items: center;
@@ -400,6 +416,88 @@
   margin-bottom: 16px;
 }
 
+.system-action-fields .select-field {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.system-action-fields .select-field > span {
+  color: var(--fg-mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.system-modifiers {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 10px;
+  padding: 0;
+  border: 0;
+}
+
+.system-modifiers[hidden] {
+  display: none;
+}
+
+.system-modifiers legend {
+  margin-bottom: 7px;
+  color: var(--fg-mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.system-modifiers label {
+  position: relative;
+  min-width: 0;
+}
+
+.system-modifiers input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+}
+
+.system-modifiers span {
+  display: grid;
+  place-items: center;
+  min-height: 42px;
+  padding: 8px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  transition-property: background-color, color, box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: var(--ease);
+}
+
+.system-modifiers input:checked + span {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--accent-hot);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.34),
+    0 0 16px rgba(var(--accent-rgb), 0.08);
+}
+
+.system-modifiers input:focus-visible + span {
+  outline: 2px solid var(--accent-hot);
+  outline-offset: 2px;
+}
+
+.system-modifiers label:active span {
+  transform: scale(0.96);
+}
+
+.system-action-hint {
+  min-height: 34px;
+  margin: 10px 0 14px;
+}
+
 .color-field {
   display: flex;
   align-items: center;
@@ -444,6 +542,10 @@
   .system-list--rules,
   .indicator-editor-grid {
     grid-template-columns: 1fr;
+  }
+
+  .system-modifiers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .system-row {

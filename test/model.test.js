@@ -66,6 +66,7 @@ import {
   buildIndicatorOverlay,
   buildKeyActionPlan,
   hostShortcutMappings,
+  keyActionTriggerLabel,
   normalizeSystemProfile,
 } from "../renderer/js/system-data.js";
 import deviceIds from "../shared/device-ids.json" with { type: "json" };
@@ -929,20 +930,82 @@ test("system controls are per-profile, unique, and limited to spare keys", () =>
     ],
   });
   assert.deepEqual(
-    profile.keyActions.map(({ keyCode, action }) => ({ keyCode, action })),
+    profile.keyActions.map(({ keyCode, action, triggerType }) => ({
+      keyCode,
+      action,
+      triggerType,
+    })),
     [
-      { keyCode: "PGUP", action: "media-previous" },
-      { keyCode: "PGDN", action: "microphone-toggle" },
+      {
+        keyCode: "PGUP",
+        action: "media-previous",
+        triggerType: "replace",
+      },
+      {
+        keyCode: "PGDN",
+        action: "microphone-toggle",
+        triggerType: "replace",
+      },
     ],
   );
   assert.deepEqual(buildKeyActionPlan({}, profile), [
     { keyCode: "HOME", value: 74, kind: "restore" },
     { keyCode: "PGUP", value: 188, kind: "action" },
-    { keyCode: "PGDN", value: 105, kind: "action" },
+    { keyCode: "PGDN", value: 106, kind: "action" },
     { keyCode: "END", value: 77, kind: "restore" },
   ]);
   assert.deepEqual(hostShortcutMappings(profile), [{
-    accelerator: "F14",
+    accelerator: "F15",
+    action: "microphone-toggle",
+    inputUid: "",
+    outputUid: "",
+  }]);
+});
+
+test("modifier bindings preserve factory keys and reject ambiguous controls", () => {
+  const profile = normalizeSystemProfile({
+    enabled: true,
+    keyActions: [
+      {
+        id: "mic",
+        keyCode: "HOME",
+        action: "microphone-toggle",
+        triggerType: "shortcut",
+        modifiers: ["Command"],
+      },
+      {
+        id: "same-key",
+        keyCode: "HOME",
+        action: "media-play-pause",
+      },
+      {
+        id: "no-modifier",
+        keyCode: "PGUP",
+        action: "microphone-toggle",
+        triggerType: "shortcut",
+      },
+      {
+        id: "onboard-shortcut",
+        keyCode: "END",
+        action: "media-next",
+        triggerType: "shortcut",
+        modifiers: ["Command"],
+      },
+    ],
+  });
+  assert.equal(profile.keyActions.length, 1);
+  assert.equal(keyActionTriggerLabel(profile.keyActions[0]), "⌘Home");
+  assert.deepEqual(
+    buildKeyActionPlan({}, profile).map(({ keyCode, value }) => [keyCode, value]),
+    [
+      ["HOME", 74],
+      ["PGUP", 75],
+      ["PGDN", 78],
+      ["END", 77],
+    ],
+  );
+  assert.deepEqual(hostShortcutMappings(profile), [{
+    accelerator: "Command+Home",
     action: "microphone-toggle",
     inputUid: "",
     outputUid: "",
@@ -962,6 +1025,26 @@ test("pausing system controls restores factory functions deterministically", () 
     ["PGDN", 78],
     ["END", 77],
   ]);
+});
+
+test("System remains a keyboard configuration surface", () => {
+  const html = readFileSync(
+    new URL("../renderer/index.html", import.meta.url),
+    "utf8",
+  );
+  const main = readFileSync(
+    new URL("../electron/main.js", import.meta.url),
+    "utf8",
+  );
+  const preload = readFileSync(
+    new URL("../electron/preload.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(html, /id="systemActionTrigger"/);
+  assert.match(html, /data-system-modifier/);
+  assert.doesNotMatch(html, /btnToggleSystemMic|btnApplyMeeting/);
+  assert.doesNotMatch(main, /Unmute microphone|Mute microphone"/);
+  assert.doesNotMatch(preload, /performSystemAction/);
 });
 
 test("indicator overlay composes priority and describes an activity row", () => {

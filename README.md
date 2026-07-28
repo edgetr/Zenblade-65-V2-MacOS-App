@@ -18,8 +18,8 @@ A free, open-source macOS controller for the **Pwnage Zenblade 65 V2** keyboard.
 - Remap all 68 keys across six onboard layers.
 - Configure ten SOCD pairs independently for each hardware profile.
 - Record and edit sixteen onboard macro slots using the keyboard.
-- Turn Home, Page Up, Page Down, or End into onboard media controls per profile.
-- Switch macOS audio inputs and outputs, toggle microphone mute, and apply a profile-specific meeting setup.
+- Turn Home, Page Up, Page Down, or End into onboard media controls per profile, or preserve the key and bind a modifier combination.
+- Switch macOS audio inputs and outputs, toggle microphone mute, and apply a profile-specific meeting setup from keyboard bindings.
 - Build configurable microphone and process-aware status maps with editable colors, priorities, keys, and animated activity rows.
 - Keep three local profiles with independent lighting, feel, and per-key settings.
 - Switch profiles automatically for applications chosen by the user.
@@ -128,14 +128,14 @@ Every advanced save reads the setting back from the keyboard and reports an erro
 
 The **System** page links spare keyboard keys to macOS without introducing an arbitrary script runner.
 
-- **Key controls** owns only Home, Page Up, Page Down, and End while enabled. Media functions use the keyboard’s verified onboard keycodes, so playback and volume continue working if the app window is closed. Microphone and audio-route actions use reserved F13–F24 triggers and the native app bridge.
-- **Meeting setup** stores an input and output device independently for each profile. Apply it from the page or map it to one of the four control keys; it selects both devices and unmutes the chosen microphone.
+- **Key controls** offers two trigger styles. **Replace a key** turns Home, Page Up, Page Down, or End into the selected function; media functions use verified onboard keycodes, so playback and volume work without the app window. **Modifier + key** preserves the factory key and runs a desktop action such as Command+Home → microphone toggle while the keyboard is connected and Zenblade is running in the background. One binding may own each spare key, preventing ambiguous overlaps.
+- **Meeting setup** stores an input and output device independently for each profile. It is configuration only: map Meeting setup, Select microphone, or Select audio output to a keyboard binding to invoke it.
 - **Status map** watches microphone mute state or a user-supplied process-name fragment. Rules choose their own color, key or activity row, and priority. Mic and action rules may intentionally share a key because input mappings and status colors are separate layers.
 - **Quick presets** provide editable starting points for muted microphone, Codex, Claude Code, and Grok. They are ordinary rules after creation: names, process matches, targets, priorities, and colors remain fully customizable.
 
 The Zenblade V2 firmware currently exposes whole-board lighting parameters but no per-key RGB framebuffer. The app therefore renders status rules in its live keyboard map and never replaces the physical keyboard’s selected lighting effect with a misleading whole-board color. The status engine and rendering output are isolated so a future verified per-key protocol or firmware can drive the same rules physically.
 
-System controls and indicators are stored inside each Zenblade profile and are included in profile exports. Pausing controls or removing a key assignment restores Home, Page Up, Page Down, and End to their factory functions the next time controls are synced. Process matching and audio inspection remain entirely local to the Mac.
+System controls and indicators are stored inside each Zenblade profile and are included in profile exports. Pausing controls or removing a replacement restores Home, Page Up, Page Down, and End to their factory functions the next time controls are synced; modifier shortcuts are unregistered. Process matching and audio inspection remain entirely local to the Mac.
 
 ### Automatic switching
 

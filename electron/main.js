@@ -78,9 +78,13 @@ const desktopState = {
   profile: 0,
   lightingOn: true,
   automationEnabled: false,
-  systemEnabled: false,
-  micMuted: false,
 };
+
+const allowedSystemAccelerator = (value) =>
+  /^F1[3-6]$/.test(value) ||
+  /^(?:(?:Command|Control|Alt|Shift)\+)+(?:Home|PageUp|PageDown|End)$/.test(
+    value,
+  );
 
 function sendToRenderer(channel, ...args) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -140,22 +144,6 @@ function buildTrayMenu() {
       type: "checkbox",
       checked: desktopState.automationEnabled,
       click: () => sendToRenderer("app:toggleAutomation"),
-    },
-    {
-      label: desktopState.micMuted ? "Unmute microphone" : "Mute microphone",
-      enabled: desktopState.systemEnabled,
-      click: async () => {
-        try {
-          const audio = await systemBridge?.perform({
-            action: "microphone-toggle",
-          });
-          desktopState.micMuted = audio?.micMuted === true;
-          sendToRenderer("app:systemContext", { audio });
-          buildTrayMenu();
-        } catch {
-          showMainWindow("system");
-        }
-      },
     },
     { type: "separator" },
     {
@@ -427,8 +415,6 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
       profile: Math.max(0, Math.min(2, Number(next?.profile) | 0)),
       lightingOn: next?.lightingOn !== false,
       automationEnabled: next?.automationEnabled === true,
-      systemEnabled: next?.systemEnabled === true,
-      micMuted: next?.micMuted === true,
     });
     if (desktopState.automationEnabled && !automationWasEnabled) {
       startForegroundMonitor();
@@ -440,12 +426,6 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
   ipcMain.handle("app:getSystemContext", async (_event, detectors) => {
     return systemBridge.getContext(detectors);
   });
-  ipcMain.handle("app:performSystemAction", async (_event, value) => {
-    const audio = await systemBridge.perform(value);
-    desktopState.micMuted = audio?.micMuted === true;
-    buildTrayMenu();
-    return audio;
-  });
   ipcMain.handle("app:configureSystemShortcuts", (_event, mappings) => {
     for (const accelerator of registeredSystemShortcuts) {
       globalShortcut.unregister(accelerator);
@@ -454,7 +434,7 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
     const failures = [];
     for (const value of Array.isArray(mappings) ? mappings : []) {
       const accelerator = String(value?.accelerator || "");
-      if (!/^F(1[3-9]|2[0-4])$/.test(accelerator)) continue;
+      if (!allowedSystemAccelerator(accelerator)) continue;
       const mapping = {
         action: String(value?.action || ""),
         inputUid: String(value?.inputUid || ""),
@@ -462,9 +442,7 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
       };
       const ok = globalShortcut.register(accelerator, () => {
         systemBridge.perform(mapping).then((audio) => {
-          desktopState.micMuted = audio?.micMuted === true;
           sendToRenderer("app:systemContext", { audio });
-          buildTrayMenu();
         }).catch((error) => {
           sendToRenderer("app:systemActionError", error?.message || String(error));
         });

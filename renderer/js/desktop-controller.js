@@ -41,7 +41,6 @@ export function createDesktopController({
   toast,
   recoverConnection,
   cancelRecovery,
-  systemStatus,
 }) {
   let activeApplication = null;
   let pendingProfile = null;
@@ -56,7 +55,6 @@ export function createDesktopController({
       profile: state.profile,
       lightingOn: state.lighting.isOn,
       automationEnabled: state.automation.enabled,
-      ...(systemStatus?.() || {}),
     };
     const stamp = JSON.stringify(snapshot);
     if (stamp === lastReport) return;

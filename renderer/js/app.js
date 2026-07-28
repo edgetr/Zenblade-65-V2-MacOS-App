@@ -281,6 +281,5 @@ ui.desktop = createDesktopController({
   toast,
   recoverConnection: bootstrap.recoverWithRetry,
   cancelRecovery: bootstrap.cancelRecovery,
-  systemStatus: () => ui.system?.report?.(),
 });
 syncAll();

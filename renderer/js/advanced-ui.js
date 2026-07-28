@@ -69,7 +69,9 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     const key = selectedKey();
     const physical = PHYSICAL_KEYS.find((item) => item.index === key);
     const systemManaged = layer === 0 && state.system?.enabled &&
-      state.system.keyActions?.some((item) => item.keyCode === physical?.code);
+      state.system.keyActions?.some((item) =>
+        item.triggerType !== "shortcut" && item.keyCode === physical?.code
+      );
     const current = keymaps?.[layer]?.[key];
     $("remapAssignment").disabled = !loaded || key === 0;
     $("btnSaveRemap").disabled = !state.connected || gate.running ||

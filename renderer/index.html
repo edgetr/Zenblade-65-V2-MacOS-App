@@ -509,7 +509,7 @@
                     <span>Enabled</span>
                   </label>
                 </div>
-                <p class="system-card__copy">Only Home, Page Up, Page Down, and End are available here. Remove a control or pause this profile to restore their factory functions.</p>
+                <p class="system-card__copy">Replace a spare key, or keep its normal behavior and use it with modifiers. Each key gets one unambiguous binding per profile.</p>
                 <div class="system-quick">
                   <button type="button" class="btn btn--primary btn--sm" id="btnMediaPair">Use Page keys for tracks</button>
                   <button type="button" class="btn btn--ghost btn--sm" id="btnAddSystemAction">Add control</button>
@@ -530,7 +530,7 @@
                   </div>
                   <span class="mic-pill" id="systemMicState">Checking mic…</span>
                 </div>
-                <p class="system-card__copy">Choose the devices this profile should use. “Apply meeting setup” switches both and unmutes the microphone.</p>
+                <p class="system-card__copy">Choose the devices used when a keyboard binding invokes Meeting setup, Select microphone, or Select audio output. Nothing runs from this panel.</p>
                 <div class="system-audio-fields">
                   <label class="select-field">
                     <span>Microphone</span>
@@ -541,10 +541,7 @@
                     <select class="select-input" id="systemOutputDevice"></select>
                   </label>
                 </div>
-                <div class="btn-row">
-                  <button type="button" class="btn btn--primary btn--sm" id="btnApplyMeeting">Apply meeting setup</button>
-                  <button type="button" class="btn btn--ghost btn--sm" id="btnToggleSystemMic">Toggle microphone</button>
-                </div>
+                <p class="system-config-note">Map an action above to control audio from the keyboard.</p>
               </article>
 
               <article class="card system-card system-card--indicators">
@@ -584,7 +581,14 @@
                   <h3 class="card__title" id="systemActionEditorTitle">Add control</h3>
                   <button type="button" class="btn btn--ghost btn--sm" id="btnCancelSystemAction">Cancel</button>
                 </div>
-                <div class="advanced-fields">
+                <div class="advanced-fields system-action-fields">
+                  <label class="select-field">
+                    <span>Trigger</span>
+                    <select class="select-input" id="systemActionTrigger">
+                      <option value="replace">Replace a key</option>
+                      <option value="shortcut">Modifier + key</option>
+                    </select>
+                  </label>
                   <label class="select-field">
                     <span>Key</span>
                     <select class="select-input" id="systemActionKey"></select>
@@ -594,6 +598,14 @@
                     <select class="select-input" id="systemActionType"></select>
                   </label>
                 </div>
+                <fieldset class="system-modifiers" id="systemModifierField" hidden>
+                  <legend>Modifiers</legend>
+                  <label><input type="checkbox" value="Command" data-system-modifier /><span>⌘ Command</span></label>
+                  <label><input type="checkbox" value="Control" data-system-modifier /><span>⌃ Control</span></label>
+                  <label><input type="checkbox" value="Alt" data-system-modifier /><span>⌥ Option</span></label>
+                  <label><input type="checkbox" value="Shift" data-system-modifier /><span>⇧ Shift</span></label>
+                </fieldset>
+                <p class="system-action-hint" id="systemActionHint">The selected key is replaced on the keyboard and restored when this binding is removed.</p>
                 <button type="button" class="btn btn--primary" id="btnSaveSystemAction">Add control</button>
               </div>
             </div>

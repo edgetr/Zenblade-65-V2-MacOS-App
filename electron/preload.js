@@ -8,8 +8,6 @@ contextBridge.exposeInMainWorld("zenShell", {
   importProfile: (profile) => ipcRenderer.invoke("app:importProfile", profile),
   getSystemContext: (detectors) =>
     ipcRenderer.invoke("app:getSystemContext", detectors),
-  performSystemAction: (value) =>
-    ipcRenderer.invoke("app:performSystemAction", value),
   configureSystemShortcuts: (mappings) =>
     ipcRenderer.invoke("app:configureSystemShortcuts", mappings),
   setDesktopState: (state) => ipcRenderer.send("app:setDesktopState", state),
