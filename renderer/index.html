@@ -64,6 +64,15 @@
             </span>
             <span class="label">Profiles</span>
           </button>
+          <button class="nav__btn" data-panel="advanced">
+            <span class="nav__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M4 7h10M18 7h2M4 12h2M10 12h10M4 17h7M15 17h5" stroke-linecap="round" />
+                <circle cx="16" cy="7" r="2" /><circle cx="8" cy="12" r="2" /><circle cx="13" cy="17" r="2" />
+              </svg>
+            </span>
+            <span class="label">Advanced</span>
+          </button>
         </nav>
       </aside>
 
@@ -255,25 +264,210 @@
           <section class="panel" id="panel-profiles">
             <div class="panel__intro">
               <div>
-                <p class="panel__eyebrow">Profiles</p>
-                <h2>Switch your whole setup</h2>
-                <p>Each profile remembers its own lights, feel, and per-key changes.</p>
+                <h2>
+                  Profiles
+                  <button type="button" class="help-tip" data-help="Each profile keeps its own lights, feel, and per-key edits." aria-label="Help: Profiles">?</button>
+                </h2>
               </div>
               <span class="shortcut-hint" aria-label="Keyboard shortcut Command 4">⌘4</span>
             </div>
             <div class="card-toolbar profiles-toolbar">
-              <h3 class="card__title">
-                Profiles
-                <button type="button" class="help-tip" data-help="Three separate setups. Each profile keeps its own lights, feel, and per-key edits. Switching applies that profile on the keyboard when connected." aria-label="Help: Profiles">?</button>
-              </h3>
-              <button type="button" class="btn btn--ghost btn--sm" id="btnRetrySync" hidden>
-                Re-apply profile
-              </button>
+              <div class="btn-row profile-actions">
+                <button type="button" class="btn btn--ghost btn--icon" id="btnImportProfile" aria-label="Import profile" title="Import profile">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v3h14v-3" /></svg>
+                </button>
+                <button type="button" class="btn btn--ghost btn--icon" id="btnExportProfile" aria-label="Export profile" title="Export profile">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0 4 4m-4-4-4 4M5 17v3h14v-3" /></svg>
+                </button>
+                <button type="button" class="btn btn--ghost btn--icon" id="btnRetrySync" aria-label="Re-apply profile" title="Re-apply profile" hidden>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8a8 8 0 1 0 1 6M19 4v4h-4" /></svg>
+                </button>
+              </div>
             </div>
             <div class="profile-grid" id="profileGrid">
-              <button class="profile-card" data-profile="0" aria-label="Profile 1" aria-pressed="true"><span>Profile</span><strong>1</strong><small>Current</small></button>
-              <button class="profile-card" data-profile="1" aria-label="Profile 2" aria-pressed="false"><span>Profile</span><strong>2</strong><small>Switch</small></button>
-              <button class="profile-card" data-profile="2" aria-label="Profile 3" aria-pressed="false"><span>Profile</span><strong>3</strong><small>Switch</small></button>
+              <button class="profile-card" data-profile="0" aria-label="Profile 1" aria-pressed="true"><strong>P1</strong></button>
+              <button class="profile-card" data-profile="1" aria-label="Profile 2" aria-pressed="false"><strong>P2</strong></button>
+              <button class="profile-card" data-profile="2" aria-label="Profile 3" aria-pressed="false"><strong>P3</strong></button>
+            </div>
+
+            <div class="card automation-card">
+              <div class="card-toolbar">
+                <h3 class="card__title">
+                  Automatic profiles
+                  <button type="button" class="help-tip" data-help="A selected app activates its assigned profile. Fallback handles every app without a rule." aria-label="Help: Automatic profiles">?</button>
+                </h3>
+                <label class="switch switch--compact">
+                  <input type="checkbox" id="automationEnabled" aria-label="Automatic profiles" />
+                  <span class="sr-only">Automatic profiles</span>
+                </label>
+              </div>
+
+              <div class="automation-fallback">
+                <label class="switch switch--compact">
+                  <input type="checkbox" id="automationRestoreDefault" />
+                  <span>Fallback</span>
+                </label>
+                <label class="select-field" for="automationDefaultProfile">
+                  <span class="sr-only">Fallback profile</span>
+                  <select class="select-input" id="automationDefaultProfile">
+                    <option value="0">Profile 1</option>
+                    <option value="1">Profile 2</option>
+                    <option value="2">Profile 3</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="automation-rules-head">
+                <strong>Apps</strong>
+                <button type="button" class="btn btn--primary btn--icon" id="btnAddApplications" aria-label="Add applications" title="Add applications">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                </button>
+              </div>
+              <div class="automation-rules" id="automationRules"></div>
+              <p class="automation-empty" id="automationEmpty">No app rules</p>
+            </div>
+          </section>
+
+          <section class="panel" id="panel-advanced">
+            <div class="panel__intro">
+              <div>
+                <p class="panel__eyebrow">Onboard controls</p>
+                <h2>Make the keyboard yours</h2>
+                <p>Load the current hardware state before editing. Every save is read back and verified.</p>
+              </div>
+              <div class="panel__actions">
+                <span class="shortcut-hint" aria-label="Keyboard shortcut Command 5">⌘5</span>
+                <button type="button" class="btn btn--primary" id="btnLoadAdvanced">Load keyboard</button>
+              </div>
+            </div>
+
+            <p class="advanced-status" id="advancedStatus" aria-live="polite">Connect the keyboard to load onboard controls</p>
+
+            <div class="advanced-grid">
+              <article class="card advanced-card polling-card">
+                <div>
+                  <p class="panel__eyebrow">USB performance</p>
+                  <h3 class="card__title">Polling rate</h3>
+                  <p>The V2 advertises a fixed high-speed report interval. There is no firmware setter to fake here.</p>
+                </div>
+                <div class="polling-readout">
+                  <strong id="pollingValue">—</strong>
+                  <span id="pollingInterval">Connect the keyboard to verify</span>
+                </div>
+              </article>
+
+              <article class="card advanced-card">
+                <div class="card-toolbar">
+                  <div>
+                    <p class="panel__eyebrow">Six layers</p>
+                    <h3 class="card__title">Key remapping</h3>
+                  </div>
+                  <button type="button" class="btn btn--primary btn--sm" id="btnSaveRemap">Save mapping</button>
+                </div>
+                <div class="advanced-fields">
+                  <label class="select-field">
+                    <span>Layer</span>
+                    <select class="select-input" id="remapLayer"></select>
+                  </label>
+                  <label class="select-field">
+                    <span>Physical key</span>
+                    <select class="select-input" id="remapKey"></select>
+                  </label>
+                  <label class="select-field advanced-field--wide">
+                    <span>Assignment</span>
+                    <select class="select-input" id="remapAssignment"></select>
+                  </label>
+                </div>
+                <p class="advanced-note" id="remapCurrent">Load the keyboard to edit mappings.</p>
+                <p class="advanced-note is-warning" id="remapEscNote" hidden>Escape is protected by the keyboard firmware and cannot be remapped.</p>
+              </article>
+
+              <article class="card advanced-card">
+                <div class="card-toolbar">
+                  <div>
+                    <p class="panel__eyebrow">Per profile</p>
+                    <h3 class="card__title">SOCD pairs</h3>
+                  </div>
+                  <button type="button" class="btn btn--primary btn--sm" id="btnSaveSocd">Save SOCD</button>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="socdEnabled" />
+                  <span>Enable SOCD for this profile</span>
+                </label>
+                <div class="advanced-fields">
+                  <label class="select-field">
+                    <span>Pair</span>
+                    <select class="select-input" id="socdSlot"></select>
+                  </label>
+                  <label class="select-field">
+                    <span>Rule</span>
+                    <select class="select-input" id="socdMode">
+                      <option value="0">No rule (unused)</option>
+                      <option value="1">Last input wins</option>
+                      <option value="2">Neutral</option>
+                      <option value="3">Key 1 wins</option>
+                      <option value="4">Key 2 wins</option>
+                    </select>
+                  </label>
+                  <label class="select-field">
+                    <span>Key 1</span>
+                    <select class="select-input" id="socdKey1"></select>
+                  </label>
+                  <label class="select-field">
+                    <span>Key 2</span>
+                    <select class="select-input" id="socdKey2"></select>
+                  </label>
+                </div>
+                <label class="switch switch--compact">
+                  <input type="checkbox" id="socdBottomOut" />
+                  <span>Alternative behavior when both keys bottom out</span>
+                </label>
+              </article>
+
+              <article class="card advanced-card macro-card">
+                <div class="card-toolbar">
+                  <div>
+                    <p class="panel__eyebrow">16 onboard slots</p>
+                    <h3 class="card__title">Macros</h3>
+                  </div>
+                  <div class="btn-row">
+                    <button type="button" class="btn btn--ghost btn--sm" id="btnLoadMacros">Load macros</button>
+                    <button type="button" class="btn btn--primary btn--sm" id="btnSaveMacro">Save macros</button>
+                  </div>
+                </div>
+                <div class="macro-toolbar">
+                  <label class="select-field">
+                    <span>Slot</span>
+                    <select class="select-input" id="macroSlot"></select>
+                  </label>
+                  <button type="button" class="btn" id="btnRecordMacro">Record</button>
+                  <button type="button" class="btn btn--ghost" id="btnClearMacro">Clear</button>
+                  <span class="advanced-note" id="macroStorage">Not loaded</span>
+                </div>
+                <button type="button" class="macro-capture" id="macroCapture" hidden>
+                  Recording — press keys, then Escape to stop
+                </button>
+                <div class="macro-add-row">
+                  <label class="select-field">
+                    <span>Delay</span>
+                    <select class="select-input" id="macroDelay">
+                      <option value="50">50 ms</option>
+                      <option value="100">100 ms</option>
+                      <option value="250">250 ms</option>
+                      <option value="500">500 ms</option>
+                      <option value="1000">1 second</option>
+                    </select>
+                  </label>
+                  <button type="button" class="btn btn--ghost" id="btnAddMacroDelay">Add delay</button>
+                  <label class="text-field macro-text-field">
+                    <span>Text</span>
+                    <input type="text" id="macroText" maxlength="200" placeholder="ASCII text" />
+                  </label>
+                  <button type="button" class="btn btn--ghost" id="btnAddMacroText">Add text</button>
+                </div>
+                <ol class="macro-actions" id="macroActions"></ol>
+                <p class="advanced-note" id="macroEmpty">Load a macro slot, then record keys or add an action.</p>
+              </article>
             </div>
           </section>
         </div>

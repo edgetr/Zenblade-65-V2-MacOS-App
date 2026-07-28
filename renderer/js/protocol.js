@@ -3,7 +3,11 @@ import deviceIds from "../../shared/device-ids.json" with { type: "json" };
 export const VID = deviceIds.vendorId;
 export const PIDS = deviceIds.productIds;
 export const PROFILE_COUNT = 3;
-export const KEY_COUNT = 67;
+export const KEY_COUNT = 68;
+export const MATRIX_KEY_COUNT = 72;
+export const LAYER_COUNT = 6;
+export const MACRO_COUNT = 16;
+export const SOCD_SLOT_COUNT = 10;
 export const LIGHT_MODE_MAX = 44;
 const finite = (value, fallback) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -93,6 +97,138 @@ const pad = (cmd) => {
     return out;
   },
   same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+// The firmware stores keys in an 8 × 9 switch matrix. These positions are
+// ordered by the keyboard drawing (k_0 … k_67), not by matrix offset.
+// Five matrix cells are unused and must remain zero-filled.
+export const LOGICAL_MATRIX_POSITIONS = Object.freeze([
+  [0, 0], [1, 0], [0, 1], [2, 1], [0, 2], [2, 2], [0, 3], [2, 3],
+  [0, 4], [1, 4], [0, 5], [1, 5], [1, 6], [1, 7], [0, 8], [3, 0],
+  [2, 0], [1, 1], [3, 2], [1, 2], [3, 3], [1, 3], [3, 4], [2, 4],
+  [3, 5], [2, 5], [0, 6], [0, 7], [3, 8], [1, 8], [5, 0], [5, 1],
+  [4, 1], [5, 2], [4, 2], [5, 3], [5, 4], [4, 4], [5, 5], [4, 5],
+  [3, 6], [2, 6], [2, 7], [2, 8], [4, 0], [6, 1], [7, 2], [7, 3],
+  [6, 3], [4, 3], [6, 4], [7, 5], [6, 5], [5, 6], [4, 6], [5, 7],
+  [5, 8], [4, 8], [7, 0], [7, 1], [6, 2], [7, 4], [7, 6], [6, 6],
+  [7, 7], [6, 7], [7, 8], [6, 8],
+]);
+
+export function logicalIndexToMatrix(index) {
+  const value = LOGICAL_MATRIX_POSITIONS[index];
+  return value ? { row: value[0], col: value[1] } : null;
+}
+
+export function matrixIndexToLogical(matrixIndex) {
+  const safeIndex = Number(matrixIndex);
+  return LOGICAL_MATRIX_POSITIONS.findIndex(([row, col]) =>
+    row * 9 + col === safeIndex
+  );
+}
+
+export function logicalValuesToMatrix(values = [], fallback = 0) {
+  const result = Array(MATRIX_KEY_COUNT).fill(fallback);
+  for (let index = 0; index < KEY_COUNT; index++) {
+    const position = logicalIndexToMatrix(index);
+    if (!position) continue;
+    result[position.row * 9 + position.col] =
+      values[index] ?? values[0] ?? fallback;
+  }
+  return result;
+}
+
+export function matrixValuesToLogical(values = [], fallback = 0) {
+  return LOGICAL_MATRIX_POSITIONS.map(([row, col]) =>
+    values[row * 9 + col] ?? fallback
+  );
+}
+
+const clampInt = (value, min, max, fallback = min) =>
+  Math.max(min, Math.min(max, Number.isFinite(Number(value))
+    ? Math.round(Number(value))
+    : fallback));
+
+export function normalizeSocdConfig(value = {}) {
+  const normalizeKey = (key) =>
+    key == null || !Number.isFinite(Number(key)) || Number(key) < 0
+      ? null
+      : clampInt(key, 0, KEY_COUNT - 1);
+  const slots = Array.from({ length: SOCD_SLOT_COUNT }, (_, index) => {
+    const slot = value.slots?.[index] || {};
+    return {
+      mode: clampInt(slot.mode, 0, 4, 0),
+      key1: normalizeKey(slot.key1),
+      key2: normalizeKey(slot.key2),
+      bottomOut: slot.bottomOut === true,
+    };
+  });
+  return { enabled: value.enabled === true, slots };
+}
+
+export function encodeMacros(macros = []) {
+  const output = [];
+  for (let slot = 0; slot < MACRO_COUNT; slot++) {
+    for (const action of Array.isArray(macros[slot]) ? macros[slot] : []) {
+      if (action.type === "tap" || action.type === "press" ||
+        action.type === "release") {
+        const type = action.type === "tap" ? 1 : action.type === "press" ? 2 : 3;
+        output.push(1, type, clampInt(action.keycode, 0, 255, 128));
+      } else if (action.type === "delay") {
+        const duration = clampInt(action.duration, 0, 60000, 0);
+        output.push(1, 4, ...String(duration).split("").map((n) =>
+          n.charCodeAt(0)
+        ), 124);
+      } else if (action.type === "text") {
+        output.push(...Array.from(String(action.text || ""))
+          .map((character) => character.charCodeAt(0))
+          .filter((code) => code > 4 && code < 128));
+      }
+    }
+    output.push(0);
+  }
+  if (output.length > 4000) throw new Error("Macros exceed onboard storage");
+  return new Uint8Array(output);
+}
+
+export function decodeMacros(bytes = []) {
+  const macros = Array.from({ length: MACRO_COUNT }, () => []);
+  let slot = 0;
+  for (let index = 0; index < bytes.length && slot < MACRO_COUNT;) {
+    const value = bytes[index++];
+    if (value === 0) {
+      slot++;
+      continue;
+    }
+    if (value !== 1) {
+      let text = String.fromCharCode(value);
+      while (index < bytes.length && bytes[index] > 4) {
+        text += String.fromCharCode(bytes[index++]);
+      }
+      if (text) macros[slot].push({ type: "text", text });
+      continue;
+    }
+    const type = bytes[index++];
+    if (type >= 1 && type <= 3) {
+      const keycode = bytes[index++];
+      macros[slot].push({
+        type: type === 1 ? "tap" : type === 2 ? "press" : "release",
+        keycode,
+      });
+    } else if (type === 4) {
+      let digits = "";
+      while (index < bytes.length && bytes[index] !== 124) {
+        digits += String.fromCharCode(bytes[index++]);
+      }
+      index++;
+      macros[slot].push({
+        type: "delay",
+        duration: clampInt(Number.parseInt(digits, 10), 0, 60000, 0),
+      });
+    } else {
+      throw new Error("Keyboard returned an unknown macro action");
+    }
+  }
+  return macros;
+}
 
 // Rich command IDs must match their complete prefix. Some older firmware
 // replies to one-byte commands with only the command byte; that compatibility
@@ -264,8 +400,8 @@ export class ZenbladeDevice {
     return value;
   }
   _pack(values) {
-    const out = new Uint8Array(KEY_COUNT * 2);
-    for (let i = 0; i < KEY_COUNT; i++) {
+    const out = new Uint8Array(values.length * 2);
+    for (let i = 0; i < values.length; i++) {
       const n = (values[i] ?? values[0] ?? 0) & 0xffff;
       out[i * 2] = n & 255;
       out[i * 2 + 1] = n >> 8;
@@ -273,9 +409,10 @@ export class ZenbladeDevice {
     return out;
   }
   async _matrix(head, values) {
-    const p = this._pack(values);
-    for (let i = 0; i * 25 < KEY_COUNT; i++) {
-      const count = Math.min(25, KEY_COUNT - i * 25);
+    const matrixValues = logicalValuesToMatrix(values);
+    const p = this._pack(matrixValues);
+    for (let i = 0; i * 25 < MATRIX_KEY_COUNT; i++) {
+      const count = Math.min(25, MATRIX_KEY_COUNT - i * 25);
       await this.execute(
         new Uint8Array([
           ...head,
@@ -286,6 +423,117 @@ export class ZenbladeDevice {
         5,
       );
     }
+  }
+
+  async readKeymap() {
+    const layers = [];
+    for (let layer = 0; layer < LAYER_COUNT; layer++) {
+      const matrix = [];
+      let offset = layer * MATRIX_KEY_COUNT * 2;
+      for (const length of [56, 56, 32]) {
+        const bytes = await this.execute(
+          [18, offset >> 8, offset & 255, length],
+          4,
+        );
+        matrix.push(...bytes.slice(0, length));
+        offset += length;
+      }
+      const values = [];
+      for (let index = 0; index < MATRIX_KEY_COUNT; index++) {
+        values.push((matrix[index * 2] << 8) | matrix[index * 2 + 1]);
+      }
+      layers.push(matrixValuesToLogical(values));
+    }
+    return layers;
+  }
+
+  async writeKeymapKey(layer, logicalIndex, keycode) {
+    const safeLayer = clampInt(layer, 0, LAYER_COUNT - 1);
+    const safeIndex = clampInt(logicalIndex, 0, KEY_COUNT - 1);
+    if (safeIndex === 0) throw new Error("Escape cannot be remapped by firmware");
+    const position = logicalIndexToMatrix(safeIndex);
+    const value = clampInt(keycode, 0, 0xffff);
+    await this.execute([
+      5,
+      safeLayer,
+      position.row,
+      position.col,
+      value >> 8,
+      value & 255,
+    ], 4);
+    return value;
+  }
+
+  async readSocd(profile = 0) {
+    const safeProfile = clampInt(profile, 0, PROFILE_COUNT - 1);
+    const enabled = (await this.execute([48, 1, safeProfile], 3))[0] === 1;
+    const modes = await this.execute([48, 2, safeProfile], 3);
+    const keys = await this.execute([48, 3, safeProfile], 3);
+    const bottom = await this.execute([48, 4, safeProfile], 3);
+    const readKey = (value) => {
+      if (value === 255) return null;
+      const index = matrixIndexToLogical(value);
+      return index < 0 ? null : index;
+    };
+    return normalizeSocdConfig({
+      enabled,
+      slots: Array.from({ length: SOCD_SLOT_COUNT }, (_, index) => ({
+        mode: modes[index] ?? 0,
+        key1: readKey(keys[index * 2]),
+        key2: readKey(keys[index * 2 + 1]),
+        bottomOut: bottom[index] === 1,
+      })),
+    });
+  }
+
+  async writeSocd(profile, config) {
+    const safeProfile = clampInt(profile, 0, PROFILE_COUNT - 1);
+    const value = normalizeSocdConfig(config);
+    const modes = new Uint8Array(SOCD_SLOT_COUNT);
+    const keys = new Uint8Array(SOCD_SLOT_COUNT * 2).fill(255);
+    const bottom = new Uint8Array(SOCD_SLOT_COUNT);
+    value.slots.forEach((slot, index) => {
+      modes[index] = slot.mode;
+      for (const [keyOffset, logicalIndex] of [slot.key1, slot.key2].entries()) {
+        if (logicalIndex == null) continue;
+        const position = logicalIndexToMatrix(logicalIndex);
+        keys[index * 2 + keyOffset] = position.row * 9 + position.col;
+      }
+      bottom[index] = slot.bottomOut ? 1 : 0;
+    });
+    await this.execute([49, 1, safeProfile, value.enabled ? 1 : 0], 3);
+    await this.execute([49, 2, safeProfile, ...modes], 3);
+    await this.execute([49, 3, safeProfile, ...keys], 3);
+    await this.execute([49, 4, safeProfile, ...bottom], 3);
+    await this.execute([33, 243], 2);
+    return value;
+  }
+
+  async readMacros() {
+    const bytes = [];
+    for (let offset = 0; offset < 4080; offset += 60) {
+      const result = await this.execute(
+        [14, offset >> 8, offset & 255, 60],
+        5,
+      );
+      bytes.push(...result.slice(0, 60));
+    }
+    return decodeMacros(bytes);
+  }
+
+  async writeMacros(macros) {
+    const bytes = encodeMacros(macros);
+    for (let offset = 0; offset < bytes.length; offset += 60) {
+      const length = Math.min(60, bytes.length - offset);
+      await this.execute([
+        15,
+        offset >> 8,
+        offset & 255,
+        length,
+        ...bytes.slice(offset, offset + length),
+      ], 5);
+    }
+    return decodeMacros(bytes);
   }
   async writeActuationMatrix(
     {

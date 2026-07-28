@@ -10,6 +10,8 @@ import { createProfileController } from "./profile-controller.js";
 import { applyTheme } from "./theme.js";
 import { initHelpTips } from "./help-tips.js";
 import { installBootstrapUi } from "./bootstrap-ui.js";
+import { createDesktopController } from "./desktop-controller.js";
+import { createAdvancedUi } from "./advanced-ui.js";
 import { $ } from "./dom.js";
 
 const kb = new ZenbladeDevice();
@@ -27,7 +29,7 @@ function toast(message, kind = "") {
   el._timer = setTimeout(() => el.classList.remove("is-show"), 2800);
 }
 
-const ui = { lighting: null, profiles: null };
+const ui = { lighting: null, profiles: null, desktop: null, advanced: null };
 
 function syncChrome() {
   const connected = state.connected;
@@ -41,12 +43,15 @@ function syncChrome() {
   $("btnApplyActuation").disabled = deviceBusy;
   $("btnApplyKey").disabled = running || !hasKeySelected;
   $("btnResetKey").disabled = running || !hasKeySelected;
+  $("btnImportProfile").disabled = running;
   document.querySelectorAll(".profile-card").forEach((card) => {
     card.disabled = running;
   });
   $("btnApplyKey").textContent = connected ? "Apply key" : "Save key";
   $("btnResetKey").textContent = "Use global feel";
   document.documentElement.toggleAttribute("data-device-busy", running);
+  ui.desktop?.report();
+  ui.advanced?.sync();
 }
 
 const gate = new DeviceOperationGate({
@@ -63,6 +68,8 @@ function setConnected(on, info) {
   if (!on) ui.lighting?.clearAppliedBaseline();
   syncChrome();
   ui.profiles?.sync();
+  ui.advanced?.connectionChanged();
+  ui.desktop?.connectionChanged();
 }
 
 const board = createBoard({
@@ -134,17 +141,73 @@ ui.profiles = createProfilesUi({
   connected: () => state.connected,
   onSelect: profileController.select,
   onRetry: profileController.retry,
+  onAutomationChange: () => ui.desktop?.automationChanged(),
+  onChooseApplications: () => window.zenShell?.chooseApplications?.(),
+  onExport: async () => {
+    const result = await window.zenShell?.exportProfile?.({
+      profile: state.profile,
+      data: model.exportProfile(),
+    });
+    if (result && !result.canceled) toast("Profile exported", "ok");
+  },
+  onImport: async () => {
+    const targetProfile = state.profile;
+    const result = await window.zenShell?.importProfile?.(targetProfile);
+    if (!result || result.canceled) return;
+    if (
+      result.data?.format !== "zenblade-profile" ||
+      result.data?.version !== 1 ||
+      !result.data?.profile
+    ) {
+      throw new Error("This is not a supported Zenblade profile");
+    }
+    // Replace only after the file is confirmed, and only while holding the
+    // device gate so a concurrent apply cannot interleave with import writes.
+    const applied = await gate.run("Profile import", async () => {
+      const targetIsActive = state.profile === targetProfile;
+      model.replaceProfile(targetProfile, result.data.profile);
+      syncAll();
+      if (!kb.connected || !targetIsActive) return { localOnly: true };
+      return profileController.applyCurrentWithinGate({ quiet: true });
+    });
+    if (
+      applied.localOnly ||
+      (applied.deviceProfileOk && applied.lightingOk && applied.feelOk)
+    ) {
+      toast(
+        applied.localOnly
+          ? `Profile ${targetProfile + 1} imported locally`
+          : `Profile ${targetProfile + 1} imported and applied`,
+        "ok",
+      );
+    }
+  },
+  onError: (error) => toast(error?.message || String(error), "error"),
+});
+
+ui.advanced = createAdvancedUi({
+  kb,
+  state,
+  gate,
+  toast,
+  onChromeChange: syncChrome,
 });
 
 const refresh = profileController.refresh;
 
-async function connect(existing, { quiet = false } = {}) {
+async function connect(
+  existing,
+  { quiet = false, restoreLocal = false, silent = false } = {},
+) {
   return gate.run("Connection", async () => {
     const info = await kb.connect(existing);
     setConnected(true, info);
     // quiet: suppress automatic startup Connected/Synced success toasts.
     // Errors and user-initiated Refresh still announce normally.
     if (!quiet) toast("Connected", "ok");
+    if (restoreLocal) {
+      return profileController.applyCurrentWithinGate({ quiet, silent });
+    }
     return refresh({ restoreFeel: true, quiet });
   }).catch((error) => {
     if (error.message?.includes("waiting for the current device operation")) {
@@ -165,7 +228,7 @@ async function disconnect() {
 initHelpTips();
 syncAll();
 setConnected(false, null);
-installBootstrapUi({
+const bootstrap = installBootstrapUi({
   kb,
   model,
   state,
@@ -179,4 +242,19 @@ installBootstrapUi({
   setConnected,
   syncChrome,
   writeFeel,
+  applyCurrent: profileController.applyCurrent,
 });
+
+ui.desktop = createDesktopController({
+  kb,
+  model,
+  state,
+  gate,
+  lighting,
+  profileController,
+  sync: syncAll,
+  toast,
+  recoverConnection: bootstrap.recoverWithRetry,
+  cancelRecovery: bootstrap.cancelRecovery,
+});
+syncAll();

@@ -18,31 +18,46 @@ export function createProfileController({
     onSyncChange?.();
   };
 
-  async function select(index) {
-    await gate.run("Profile switch", async () => {
+  async function select(index, { quiet = false } = {}) {
+    const target = Math.max(
+      0,
+      Math.min(PROFILE_COUNT - 1, Number(index) | 0),
+    );
+    if (target === state.profile) return { ok: true, unchanged: true };
+    return gate.run("Profile switch", async () => {
       const previous = state.profile;
-      model.selectProfile(index);
+      model.selectProfile(target);
       sync();
-      if (!kb.connected) return toast(`Profile ${index + 1} selected`, "ok");
+      if (!kb.connected) {
+        if (!quiet) toast(`Profile ${target + 1} selected`, "ok");
+        return { ok: true, localOnly: true };
+      }
       const result = await applyProfile(kb, state, writeFeel);
       if (result.lightingOk) onLightingApplied?.(state.lighting);
       if (result.deviceProfileOk && result.lightingOk && result.feelOk) {
         setSyncIncomplete(null);
-        return toast(`Profile ${index + 1} applied`, "ok");
+        if (!quiet) toast(`Profile ${target + 1} applied`, "ok");
+        return { ok: true, result };
       }
       if (!result.deviceProfileOk) {
         model.selectProfile(previous);
         sync();
-        return toast(
-          `Profile ${index + 1} could not be selected on the keyboard.`,
+        if (!quiet) {
+          toast(
+            `Profile ${target + 1} could not be selected on the keyboard.`,
+            "error",
+          );
+        }
+        return { ok: false, result };
+      }
+      setSyncIncomplete({ profile: target, result });
+      if (!quiet) {
+        toast(
+          `Profile ${target + 1} is partially applied. Re-apply it to recover.`,
           "error",
         );
       }
-      setSyncIncomplete({ profile: index, result });
-      toast(
-        `Profile ${index + 1} is partially applied. Re-apply it to recover.`,
-        "error",
-      );
+      return { ok: false, result };
     });
   }
 
@@ -58,6 +73,30 @@ export function createProfileController({
     } else {
       toast("Still incomplete — reconnect and try again.", "error");
     }
+  }
+
+  async function applyCurrentWithinGate({ quiet = false, silent = false } = {}) {
+    if (!kb.connected) return { localOnly: true };
+    const result = await applyProfile(kb, state, writeFeel);
+    if (result.lightingOk) onLightingApplied?.(state.lighting);
+    if (result.deviceProfileOk && result.lightingOk && result.feelOk) {
+      setSyncIncomplete(null);
+      if (!quiet) toast(`Profile ${state.profile + 1} applied`, "ok");
+    } else {
+      setSyncIncomplete({ profile: state.profile, result });
+      if (!silent) {
+        toast("Profile is only partially applied. Use Re-apply profile.", "error");
+      }
+    }
+    return result;
+  }
+
+  async function applyCurrent(options = {}) {
+    if (!kb.connected) return { localOnly: true };
+    return gate.run(
+      "Profile apply",
+      () => applyCurrentWithinGate(options),
+    );
   }
 
   async function refresh({ restoreFeel = false, quiet = false } = {}) {
@@ -114,5 +153,11 @@ export function createProfileController({
     return result;
   }
 
-  return { select, refresh, retry };
+  return {
+    select,
+    refresh,
+    retry,
+    applyCurrent,
+    applyCurrentWithinGate,
+  };
 }

@@ -26,9 +26,21 @@ export const defaultProfile = () => ({
   appNotes: {},
 });
 
+export const defaultAutomation = () => ({
+  enabled: false,
+  restoreDefault: false,
+  defaultProfile: 0,
+  rules: [],
+});
+
+export const automationHasTargets = (automation) =>
+  automation?.restoreDefault === true ||
+  (Array.isArray(automation?.rules) && automation.rules.length > 0);
+
 export const defaultStore = () => ({
   activeProfile: 0,
   profiles: Array.from({ length: PROFILE_COUNT }, defaultProfile),
+  automation: defaultAutomation(),
 });
 
 const number = (value, fallback) =>
@@ -49,10 +61,35 @@ export function normalizeActuation(partial = {}, fallback = {}) {
   };
 }
 
+export function normalizeAutomation(raw = {}) {
+  const seen = new Set();
+  const rules = [];
+  for (const value of Array.isArray(raw.rules) ? raw.rules : []) {
+    const bundleId = String(value?.bundleId || "").trim();
+    if (!bundleId || seen.has(bundleId)) continue;
+    seen.add(bundleId);
+    rules.push({
+      bundleId,
+      name: String(value?.name || bundleId).trim().slice(0, 120) || bundleId,
+      profile: clamp(number(value?.profile, 0), 0, PROFILE_COUNT - 1) | 0,
+    });
+  }
+  const automation = {
+    enabled: raw.enabled === true,
+    restoreDefault: raw.restoreDefault === true,
+    defaultProfile:
+      clamp(number(raw.defaultProfile, 0), 0, PROFILE_COUNT - 1) | 0,
+    rules,
+  };
+  automation.enabled = automation.enabled && automationHasTargets(automation);
+  return automation;
+}
+
 export function normalizeStore(raw, validCodes = {}) {
   const store = defaultStore();
   if (!raw || typeof raw !== "object") return store;
   store.activeProfile = clamp(raw.activeProfile, 0, PROFILE_COUNT - 1) | 0;
+  store.automation = normalizeAutomation(raw.automation);
   for (let i = 0; i < PROFILE_COUNT; i++) {
     const src = raw.profiles?.[i];
     if (!src || typeof src !== "object") continue;

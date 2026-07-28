@@ -1,8 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { createModel } from "../renderer/js/state.js";
-import { normalizeActuation, normalizeStore } from "../renderer/js/store.js";
+import {
+  automationHasTargets,
+  defaultAutomation,
+  normalizeActuation,
+  normalizeAutomation,
+  normalizeStore,
+} from "../renderer/js/store.js";
+import {
+  resolveAutomationProfile,
+  runRecoverySequence,
+} from "../renderer/js/desktop-controller.js";
+import { createProfileController } from "../renderer/js/profile-controller.js";
 import { baseWireColor, keyDisplayColor } from "../renderer/js/preview.js";
 import { uiAccentFromLighting } from "../renderer/js/theme.js";
 import {
@@ -15,7 +27,14 @@ import {
   colorFromWire,
   colorToWire,
   lightingWirePreview,
+  decodeMacros,
+  encodeMacros,
+  logicalIndexToMatrix,
+  logicalValuesToMatrix,
+  matrixIndexToLogical,
+  matrixValuesToLogical,
   normalizeLighting,
+  normalizeSocdConfig,
   pctFromWire,
   pctToWire,
   pickZenbladeDevice,
@@ -43,6 +62,11 @@ import { LAYOUT_KEY_COUNT, ROWS } from "../renderer/js/layout.js";
 import deviceIds from "../shared/device-ids.json" with { type: "json" };
 
 const codes = { KeyA: 0 };
+const require = createRequire(import.meta.url);
+const {
+  assertSupportedProfileFile,
+  parseFrontApplication,
+} = require("../electron/desktop.js");
 const memory = () => {
   let value = null;
   return {
@@ -93,6 +117,232 @@ test("central model writes snapshot once and keeps notes out of HID overrides", 
     JSON.parse(storage.getItem()).profiles[0].appNotes.KeyA.macro,
     "note",
   );
+});
+
+test("automatic app rules are empty by default and fully user-defined", () => {
+  assert.deepEqual(defaultAutomation(), {
+    enabled: false,
+    restoreDefault: false,
+    defaultProfile: 0,
+    rules: [],
+  });
+  const automation = normalizeAutomation({
+    enabled: true,
+    restoreDefault: true,
+    defaultProfile: 99,
+    rules: [
+      { bundleId: "com.example.editor", name: "Editor", profile: 2 },
+      { bundleId: "com.example.editor", name: "Duplicate", profile: 0 },
+      { bundleId: "com.example.game", name: "Game", profile: -1 },
+      { bundleId: "", name: "Invalid", profile: 1 },
+    ],
+  });
+  assert.deepEqual(automation, {
+    enabled: true,
+    restoreDefault: true,
+    defaultProfile: 2,
+    rules: [
+      { bundleId: "com.example.editor", name: "Editor", profile: 2 },
+      { bundleId: "com.example.game", name: "Game", profile: 0 },
+    ],
+  });
+});
+
+test("automatic switching cannot remain enabled without a rule or fallback", () => {
+  assert.equal(automationHasTargets(defaultAutomation()), false);
+  assert.equal(
+    normalizeAutomation({ enabled: true, rules: [] }).enabled,
+    false,
+  );
+  assert.equal(
+    normalizeAutomation({ enabled: true, restoreDefault: true }).enabled,
+    true,
+  );
+
+  const model = createModel({ storage: memory(), validCodes: codes });
+  model.setAutomation({ enabled: true });
+  assert.equal(model.state.automation.enabled, false);
+  model.setAutomation({
+    rules: [{ bundleId: "com.example.app", name: "App", profile: 1 }],
+    enabled: true,
+  });
+  assert.equal(model.state.automation.enabled, true);
+  model.setAutomation({ rules: [] });
+  assert.equal(model.state.automation.enabled, false);
+});
+
+test("automatic switching resolves exact bundle rules and optional fallback", () => {
+  const automation = {
+    enabled: true,
+    restoreDefault: false,
+    defaultProfile: 0,
+    rules: [{ bundleId: "com.example.editor", name: "Editor", profile: 2 }],
+  };
+  assert.equal(
+    resolveAutomationProfile(automation, {
+      bundleId: "com.example.editor",
+    }),
+    2,
+  );
+  assert.equal(
+    resolveAutomationProfile(automation, { bundleId: "com.example.other" }),
+    null,
+  );
+  assert.equal(
+    resolveAutomationProfile(
+      { ...automation, restoreDefault: true, defaultProfile: 1 },
+      { bundleId: "com.example.other" },
+    ),
+    1,
+  );
+  assert.equal(
+    resolveAutomationProfile(
+      { ...automation, enabled: false },
+      { bundleId: "com.example.editor" },
+    ),
+    null,
+  );
+});
+
+test("quiet automatic profile selection returns HID failure without a toast", async () => {
+  const model = createModel({ storage: memory(), validCodes: codes });
+  const toasts = [];
+  const controller = createProfileController({
+    kb: {
+      connected: true,
+      writeProfile: async () => {
+        throw new Error("offline");
+      },
+    },
+    model,
+    state: model.state,
+    gate: { run: async (_label, task) => task() },
+    writeFeel: async () => {},
+    sync: () => {},
+    toast: (...args) => toasts.push(args),
+  });
+  const result = await controller.select(1, { quiet: true });
+  assert.equal(result.ok, false);
+  assert.equal(model.state.profile, 0);
+  assert.deepEqual(toasts, []);
+});
+
+test("profile export and import round-trip through model validation", () => {
+  const model = createModel({ storage: memory(), validCodes: codes });
+  model.setLighting({ hue: 123, brightness: 64 });
+  model.setOverride("KeyA", { press: 6, release: 7 });
+  const exported = model.exportProfile();
+  assert.equal(exported.format, "zenblade-profile");
+  assert.equal(exported.version, 1);
+
+  const target = createModel({ storage: memory(), validCodes: codes });
+  target.replaceProfile(0, {
+    ...exported.profile,
+    lighting: { ...exported.profile.lighting, brightness: 999 },
+    keyOverrides: {
+      ...exported.profile.keyOverrides,
+      Unknown: { press: 1, release: 1 },
+    },
+  });
+  assert.equal(target.state.lighting.hue, 123);
+  assert.equal(target.state.lighting.brightness, 100);
+  assert.deepEqual(target.state.keyOverrides.KeyA, {
+    press: 6,
+    release: 7,
+  });
+  assert.equal(target.state.keyOverrides.Unknown, undefined);
+});
+
+test("profile replace keeps other profiles and automation rules intact", () => {
+  const model = createModel({ storage: memory(), validCodes: codes });
+  model.selectProfile(1);
+  model.setLighting({ hue: 40 });
+  model.selectProfile(0);
+  model.setAutomation({
+    enabled: true,
+    rules: [{ bundleId: "com.example.app", name: "App", profile: 1 }],
+  });
+  model.replaceProfile(0, {
+    lighting: { hue: 200, brightness: 55, isOn: true, mode: 1, speed: 50, saturation: 100 },
+    actuation: { press: 10, release: 11, rapidTrigger: false },
+    keyOverrides: { KeyA: { press: 5, release: 6 } },
+    appNotes: {},
+  });
+  assert.equal(model.state.lighting.hue, 200);
+  assert.equal(model.store.profiles[1].lighting.hue, 40);
+  assert.equal(model.state.automation.enabled, true);
+  assert.equal(model.state.automation.rules[0].bundleId, "com.example.app");
+});
+
+test("profile file envelopes are rejected before import confirmation or export", () => {
+  const supported = {
+    format: "zenblade-profile",
+    version: 1,
+    profile: {
+      lighting: {},
+      actuation: {},
+      keyOverrides: {},
+      appNotes: {},
+    },
+  };
+  assert.equal(assertSupportedProfileFile(supported), supported);
+  assert.throws(
+    () => assertSupportedProfileFile({ ...supported, version: 2 }),
+    /not a supported Zenblade profile/,
+  );
+  assert.throws(
+    () =>
+      assertSupportedProfileFile({
+        ...supported,
+        profile: { ...supported.profile, keyOverrides: [] },
+      }),
+    /not a supported Zenblade profile/,
+  );
+});
+
+test("wake recovery attempts run sequentially and stop after success", async () => {
+  const events = [];
+  let attempts = 0;
+  const recovered = await runRecoverySequence({
+    delays: [0, 10, 20],
+    wait: async (delay) => events.push(`wait:${delay}`),
+    attempt: async () => {
+      attempts++;
+      events.push(`attempt:${attempts}`);
+      return attempts === 2;
+    },
+  });
+  assert.equal(recovered, true);
+  assert.deepEqual(events, ["attempt:1", "wait:10", "attempt:2"]);
+});
+
+test("superseded wake recovery stops before another device attempt", async () => {
+  let current = true;
+  let attempts = 0;
+  const recovered = await runRecoverySequence({
+    delays: [0, 10],
+    wait: async () => {
+      current = false;
+    },
+    isCurrent: () => current,
+    attempt: async () => {
+      attempts++;
+      return false;
+    },
+  });
+  assert.equal(recovered, false);
+  assert.equal(attempts, 1);
+});
+
+test("permission-free macOS foreground metadata is parsed defensively", () => {
+  assert.deepEqual(
+    parseFrontApplication(`
+"Example App" ASN:0x0-0x123:
+    bundleID="com.example.app"
+  `),
+    { bundleId: "com.example.app", name: "Example App" },
+  );
+  assert.equal(parseFrontApplication("bundleID is unavailable"), null);
 });
 
 test("preview and chrome retain distinct legibility policy", () => {
@@ -436,7 +686,7 @@ test("effect preview samples the selected pattern instead of a single solid swat
   );
 });
 
-test("effect preview retains Zenblade's 67-key rows and differentiated keyboard pattern", () => {
+test("effect preview retains Zenblade's 68-key rows and differentiated keyboard pattern", () => {
   const lighting = {
     isOn: true,
     mode: 3,
@@ -446,8 +696,8 @@ test("effect preview retains Zenblade's 67-key rows and differentiated keyboard 
   };
   const keys = effectPreviewKeys(lighting);
   assert.equal(keys.length, LAYOUT_KEY_COUNT);
-  assert.equal(keys.length, 67);
-  assert.deepEqual(ROWS.map((row) => row.length), [15, 15, 14, 14, 9]);
+  assert.equal(keys.length, 68);
+  assert.deepEqual(ROWS.map((row) => row.length), [15, 15, 14, 14, 10]);
   assert.equal(keys.find((key) => key.code === "BSPC").width, 2);
   assert.notDeepEqual(
     keys.find((key) => key.code === "ESC").rgb,
@@ -579,10 +829,56 @@ test("keyboard-first navigation uses one board tab stop and app shortcuts", () =
     /interactive && rowIndex === 0 && col === 0 \? 0 : -1/,
   );
   assert.match(boardSource, /"ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"/);
-  assert.match(bootstrapSource, /\^\[1-4\]\$/);
+  assert.match(bootstrapSource, /\^\[1-5\]\$/);
   assert.match(bootstrapSource, /command && event\.key === "Enter"/);
   assert.match(mainSource, /accelerator: "CmdOrCtrl\+1"/);
   assert.match(mainSource, /accelerator: "CmdOrCtrl\+4"/);
+  assert.match(mainSource, /accelerator: "CmdOrCtrl\+5"/);
   assert.match(preloadSource, /onNavigate/);
   assert.match(bootstrapSource, /onNavigate\?\.\(\(panel\) => navigate\(panel\)\)/);
+});
+
+test("logical keys round-trip through the Zenblade 8 by 9 matrix", () => {
+  const values = Array.from({ length: 68 }, (_, index) => index + 100);
+  const matrix = logicalValuesToMatrix(values);
+  assert.equal(matrix.length, 72);
+  assert.deepEqual(matrixValuesToLogical(matrix), values);
+  assert.deepEqual(logicalIndexToMatrix(0), { row: 0, col: 0 });
+  assert.deepEqual(logicalIndexToMatrix(67), { row: 6, col: 8 });
+  assert.equal(matrixIndexToLogical(60), 63);
+  assert.equal(matrixIndexToLogical(999), -1);
+});
+
+test("macro codec preserves all supported onboard action types", () => {
+  const macros = Array.from({ length: 16 }, () => []);
+  macros[0] = [
+    { type: "tap", keycode: 4 },
+    { type: "delay", duration: 125 },
+    { type: "press", keycode: 225 },
+    { type: "release", keycode: 225 },
+    { type: "text", text: "Hi!" },
+  ];
+  macros[15] = [{ type: "tap", keycode: 40 }];
+  assert.deepEqual(decodeMacros(encodeMacros(macros)), macros);
+});
+
+test("SOCD config clamps profiles to ten safe hardware slots", () => {
+  const config = normalizeSocdConfig({
+    enabled: true,
+    slots: [{
+      mode: 99,
+      key1: 31,
+      key2: null,
+      bottomOut: true,
+    }],
+  });
+  assert.equal(config.enabled, true);
+  assert.equal(config.slots.length, 10);
+  assert.deepEqual(config.slots[0], {
+    mode: 4,
+    key1: 31,
+    key2: null,
+    bottomOut: true,
+  });
+  assert.equal(normalizeSocdConfig({ slots: [{ mode: 0 }] }).slots[0].mode, 0);
 });

@@ -1,5 +1,6 @@
 import { deepClone } from "./store.js";
 import { pickZenbladeDevice } from "./protocol.js";
+import { runRecoverySequence } from "./desktop-controller.js";
 import { $ } from "./dom.js";
 
 export function installBootstrapUi({
@@ -16,6 +17,7 @@ export function installBootstrapUi({
   setConnected,
   syncChrome,
   writeFeel,
+  applyCurrent,
 }) {
   const setDiscoveryVisible = (visible) => {
     $("deviceDiscovery").hidden = !visible;
@@ -76,7 +78,7 @@ export function installBootstrapUi({
     lighting.visibility();
   });
   const navigate = (panel, { focus = true } = {}) => {
-    if (!["keyboard", "lighting", "actuation", "profiles"].includes(panel)) return;
+    if (!["keyboard", "lighting", "actuation", "profiles", "advanced"].includes(panel)) return;
     setActivePanel(panel);
     if (focus) document.querySelector(`[data-panel="${panel}"]`)?.focus();
     board.scheduleScale();
@@ -86,9 +88,9 @@ export function installBootstrapUi({
   window.zenShell?.onNavigate?.((panel) => navigate(panel));
   document.addEventListener("keydown", (event) => {
     const command = event.metaKey || event.ctrlKey;
-    if (command && !event.altKey && !event.shiftKey && /^[1-4]$/.test(event.key)) {
+    if (command && !event.altKey && !event.shiftKey && /^[1-5]$/.test(event.key)) {
       event.preventDefault();
-      const panel = ["keyboard", "lighting", "actuation", "profiles"][
+      const panel = ["keyboard", "lighting", "actuation", "profiles", "advanced"][
         Number(event.key) - 1
       ];
       // macOS routes Command-number through the native View menu. Keeping the
@@ -133,16 +135,96 @@ export function installBootstrapUi({
     navigator.hid.addEventListener("connect", (event) => {
       const zenblade = pickZenbladeDevice([event.device]);
       if (!state.connected && zenblade) {
-        connect(zenblade).then((result) => setDiscoveryVisible(!result));
+        recoverWithRetry({ device: zenblade }).catch(() => {});
       }
     });
   }
-  window.zenShell?.onReconnect?.(() =>
-    state.connected
-      ? gate.run("Reconnect refresh", () => refresh({ restoreFeel: true }))
-        .catch(() => {})
-      : connect()
-  );
+  let recoveryPromise = null;
+  const profileApplied = (result) =>
+    result?.deviceProfileOk && result?.lightingOk && result?.feelOk;
+  const recoverConnection = ({ quiet = false, device = null } = {}) => {
+    if (recoveryPromise) return recoveryPromise;
+    recoveryPromise = (async () => {
+      if (!navigator.hid) return false;
+      // Wait briefly if another device operation is finishing so wake/HID
+      // reconnect does not lose the only recovery attempt to a busy gate.
+      for (let spin = 0; gate.running && spin < 20; spin++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      if (gate.running) return false;
+      if (kb.connected) {
+        try {
+          const result = await applyCurrent({ quiet: true, silent: true });
+          if (!profileApplied(result)) throw new Error("Profile restore failed");
+          setDiscoveryVisible(false);
+          if (!quiet) toast("Reconnected and restored", "ok");
+          return true;
+        } catch {
+          try {
+            await kb.disconnect();
+          } catch {
+            // Device may already be gone after sleep.
+          }
+          setConnected(false, null);
+        }
+      }
+      let known = null;
+      try {
+        known = pickZenbladeDevice(
+          device ? [device] : await navigator.hid.getDevices(),
+        );
+      } catch {
+        known = device ? pickZenbladeDevice([device]) : null;
+      }
+      if (!known) {
+        setDiscoveryVisible(true);
+        if (!quiet) toast("Keyboard is unavailable", "error");
+        return false;
+      }
+      const result = await connect(known, {
+        quiet: true,
+        restoreLocal: true,
+        silent: true,
+      });
+      const recovered = profileApplied(result);
+      setDiscoveryVisible(!kb.connected);
+      if (!quiet) {
+        toast(
+          recovered
+            ? "Reconnected and restored"
+            : "Reconnected, but the profile could not be fully restored",
+          recovered ? "ok" : "error",
+        );
+      }
+      return recovered;
+    })().finally(() => {
+      recoveryPromise = null;
+    });
+    return recoveryPromise;
+  };
+  let recoveryGeneration = 0;
+  const cancelRecovery = () => {
+    recoveryGeneration++;
+  };
+  const recoverWithRetry = ({ device = null } = {}) => {
+    const generation = ++recoveryGeneration;
+    return runRecoverySequence({
+      attempt: () => recoverConnection({ quiet: true, device }),
+      isCurrent: () => generation === recoveryGeneration,
+    });
+  };
+  window.zenShell?.onReconnect?.(() => {
+    recoverConnection({ quiet: true })
+      .then((recovered) =>
+        toast(
+          recovered
+            ? "Reconnected and restored"
+            : "Keyboard is unavailable or could not be fully restored",
+          recovered ? "ok" : "error",
+        )
+      )
+      .catch((error) => toast(error?.message || String(error), "error"));
+  });
 
   if (new URLSearchParams(location.search).has("test")) {
     window.__zenTest = {
@@ -191,4 +273,11 @@ export function installBootstrapUi({
       setDiscoveryVisible(true);
     }
   })().catch(() => {});
+
+  return {
+    navigate,
+    recoverConnection,
+    recoverWithRetry,
+    cancelRecovery,
+  };
 }

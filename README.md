@@ -14,7 +14,15 @@ A free, open-source macOS controller for the **Pwnage Zenblade 65 V2** keyboard.
 - Show the visible start and end colors for horizontal and vertical gradients.
 - Configure global press/release points and Rapid Trigger.
 - Save press/release overrides for individual keys.
+- Verify the keyboard's fixed 8,000 Hz / 125 μs USB report interval.
+- Remap all 68 keys across six onboard layers.
+- Configure ten SOCD pairs independently for each hardware profile.
+- Record and edit sixteen onboard macro slots using the keyboard.
 - Keep three local profiles with independent lighting, feel, and per-key settings.
+- Switch profiles automatically for applications chosen by the user.
+- Control profiles, lighting, and reconnect from the macOS menu bar.
+- Import and export validated profile files for backup or sharing.
+- Reconnect and restore state after USB changes, sleep, wake, and screen unlock.
 - Browse and edit local settings while the keyboard is disconnected.
 - Restore locally saved actuation settings when reconnecting.
 
@@ -41,7 +49,7 @@ npm run install-app
 
 The installer performs a fresh build, creates a local ad-hoc signature, verifies the bundle, replaces `/Applications/Zenblade.app`, and opens it. Run the same command after pulling future updates.
 
-On first use, macOS may show the filtered HID device picker. Select the Zenblade once; subsequent launches normally reconnect automatically. Use **Device → Reconnect** or the **Refresh** button if needed.
+On first use, select **Choose keyboard**, then choose the filtered Zenblade in the macOS device picker. Subsequent launches normally reconnect automatically. Use **Device → Reconnect**, the menu-bar controller, or the **Refresh** button if needed.
 
 ## Build from source
 
@@ -99,18 +107,49 @@ Select a key in the keyboard diagram to set a press/release override. **Save Key
 
 Profiles 1–3 keep separate lighting, Feel, and per-key settings. Switching profiles writes the selected profile and attempts to apply all of its settings. If only part of that operation succeeds, the Profiles page offers a recovery action.
 
+Use **Export** to save the current profile as a `.zenbladeprofile` file. **Import** validates a profile file, confirms before replacing the current local profile, and applies it when the keyboard is connected.
+
+### Advanced
+
+Select **Load keyboard** before editing advanced controls. This reads the real onboard configuration instead of assuming defaults.
+
+- **Polling rate** reports the 125 μs USB interval advertised by the connected V2, which is 8,000 Hz. The current firmware does not expose a polling-rate setter, so the app does not show a control that cannot affect the hardware.
+- **Key remapping** edits one physical key on one of the six hardware layers. Escape remains protected because the firmware rejects remapping it.
+- **SOCD pairs** provides ten slots per hardware profile with last-input, neutral, and dominant-key rules.
+- **Macros** loads all sixteen hardware slots. Select **Record**, type the sequence, and press Escape or select **Stop recording**. Delays and ASCII text can also be added directly.
+
+Every advanced save reads the setting back from the keyboard and reports an error if the stored data does not match.
+
+### Automatic switching
+
+Automatic switching starts with no application rules. In **Profiles**:
+
+1. Select **Add applications** and choose one or more installed Mac apps.
+2. Choose the profile each application should activate.
+3. Optionally enable a fallback profile for every application without a rule.
+4. Turn **Automatic switching** on.
+
+Rules match exact macOS bundle identifiers; the app does not assume or hardcode games, editors, or other applications. Turn the feature off from either the Profiles page or the menu-bar controller to pause switching without deleting rules.
+
+### Menu bar and reconnect recovery
+
+Zenblade remains available from the macOS menu bar when its window is closed. The menu provides the current connection state, Profile 1–3, lighting power, automatic switching, reconnect, and a shortcut back to the main window.
+
+After sleep, wake, unlock, or a supported keyboard reconnect, the app reuses the existing WebHID permission and restores the current profile without opening a new device chooser. If the keyboard is unavailable, local settings remain intact and **Choose keyboard** stays available.
+
 ## Architecture
 
 Zenblade is a small Electron application with no renderer framework or production runtime dependencies.
 
 | Area | Main files | Responsibility |
 | --- | --- | --- |
-| Electron host | `electron/main.js`, `electron/preload.js` | Window lifecycle, macOS menu, external-link handling, HID permission bridge |
-| App orchestration | `renderer/js/app.js`, `renderer/js/bootstrap-ui.js` | Connect/disconnect flow, operation gating, navigation, top-level UI synchronization |
-| HID protocol | `renderer/js/protocol.js`, `shared/device-ids.json` | Device filtering, command queue, wire packing, lighting/profile/actuation reads and writes |
+| Electron host | `electron/main.js`, `electron/preload.js`, `electron/desktop.js` | Window/tray lifecycle, foreground-app metadata, file dialogs, power events, macOS menu, HID permission bridge |
+| App orchestration | `renderer/js/app.js`, `renderer/js/bootstrap-ui.js`, `renderer/js/desktop-controller.js` | Connect/recovery flow, app-aware switching, tray state, operation gating, navigation, top-level UI synchronization |
+| HID protocol | `renderer/js/protocol.js`, `shared/device-ids.json` | Device filtering, command queue, 8 × 9 matrix packing, lighting/profile/actuation, remapping, SOCD, and macro reads/writes |
 | State and persistence | `renderer/js/state.js`, `renderer/js/store.js` | Profile model, validation, migration, debounced `localStorage` persistence |
 | Lighting | `renderer/js/lighting-modes.js`, `lighting-ui.js`, `lighting-preview.js`, `preview.js` | Fixed firmware IDs, control visibility, wire-quantized colors, effect preview recipes |
-| Keyboard and feel | `renderer/js/board.js`, `key-editor.js`, `layout.js`, `device-ops.js` | 67-key layout, responsive rendering, per-key overrides, full actuation matrices |
+| Keyboard and feel | `renderer/js/board.js`, `key-editor.js`, `layout.js`, `device-ops.js` | 68-key layout, responsive rendering, per-key overrides, full 72-cell firmware matrices |
+| Advanced controls | `renderer/js/advanced-ui.js`, `advanced-data.js` | Keyboard-first remapping, SOCD pairs, macro recording, and hardware read-back verification |
 | Presentation | `renderer/index.html`, `renderer/css/` | Accessible semantic controls and native macOS-oriented visual styling |
 | Tests | `test/model.test.js` | Model boundaries, HID packing/matching, mode integrity, preview behavior, regressions |
 
@@ -130,7 +169,7 @@ flowchart LR
 - Lighting firmware IDs are wire values. Never renumber them when hiding an unsupported UI option.
 - Lighting writes intentionally send both command families `7` and `9` for v1/v2 and v3 compatibility.
 - Rich HID responses must match the complete command prefix; matching only the first byte can resolve the wrong queued command.
-- Actuation writes send full 67-key matrices. Preserve the `CODE_TO_MATRIX_INDEX` mapping and its tests.
+- Actuation writes translate 68 logical keys into the firmware's full 72-cell matrix. Preserve `LOGICAL_MATRIX_POSITIONS`, `CODE_TO_MATRIX_INDEX`, and their round-trip tests.
 - Keep hardware work inside `DeviceOperationGate` so overlapping writes cannot corrupt the command queue.
 - Keep `contextIsolation` enabled, renderer Node integration disabled, and HID permissions narrowly scoped.
 - Previews should use the same wire conversions as device writes. Do not add cosmetic brightness floors or color whitening to the key fill.

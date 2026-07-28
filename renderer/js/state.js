@@ -2,6 +2,8 @@ import {
   deepClone,
   loadStore,
   normalizeActuation,
+  normalizeAutomation,
+  normalizeStore,
   saveStore,
 } from "./store.js";
 import { normalizeLighting, PROFILE_COUNT } from "./protocol.js";
@@ -16,6 +18,7 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     actuation: deepClone(current.actuation),
     keyOverrides: deepClone(current.keyOverrides),
     appNotes: deepClone(current.appNotes),
+    automation: deepClone(store.automation),
     selectedKey: null,
     syncIncomplete: null,
   };
@@ -30,6 +33,7 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
       appNotes: deepClone(state.appNotes),
     };
     store.activeProfile = state.profile;
+    store.automation = deepClone(state.automation);
   };
 
   const persist = (immediate = false) => {
@@ -79,6 +83,54 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     persist();
   };
 
+  const setAutomation = (partial) => {
+    state.automation = normalizeAutomation({
+      ...state.automation,
+      ...partial,
+    });
+    persist(true);
+    return state.automation;
+  };
+
+  const replaceProfile = (index, profile) => {
+    snapshot();
+    const profileIndex = Math.max(
+      0,
+      Math.min(PROFILE_COUNT - 1, Number(index) | 0),
+    );
+    const normalized = normalizeStore({
+      activeProfile: profileIndex,
+      profiles: Array.from({ length: PROFILE_COUNT }, (_, i) =>
+        i === profileIndex ? profile : store.profiles[i]
+      ),
+      automation: state.automation,
+    }, validCodes);
+    store.profiles[profileIndex] = deepClone(normalized.profiles[profileIndex]);
+    if (profileIndex === state.profile) {
+      const next = deepClone(store.profiles[profileIndex]);
+      state.lighting = next.lighting;
+      state.actuation = next.actuation;
+      state.keyOverrides = next.keyOverrides;
+      state.appNotes = next.appNotes;
+      state.selectedKey = null;
+    }
+    persist(true);
+    return deepClone(store.profiles[profileIndex]);
+  };
+
+  const exportProfile = (index = state.profile) => {
+    snapshot();
+    const profileIndex = Math.max(
+      0,
+      Math.min(PROFILE_COUNT - 1, Number(index) | 0),
+    );
+    return {
+      format: "zenblade-profile",
+      version: 1,
+      profile: deepClone(store.profiles[profileIndex]),
+    };
+  };
+
   const selectProfile = (index) => {
     snapshot();
     const profileIndex = Math.max(
@@ -103,6 +155,9 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     setActuation,
     setOverride,
     resetOverride,
+    setAutomation,
+    replaceProfile,
+    exportProfile,
     selectProfile,
     persist,
     flush: () => persist(true),
