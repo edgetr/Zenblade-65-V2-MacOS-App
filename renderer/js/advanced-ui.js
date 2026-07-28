@@ -67,6 +67,9 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     const loaded = !!keymaps;
     const layer = selectedLayer();
     const key = selectedKey();
+    const physical = PHYSICAL_KEYS.find((item) => item.index === key);
+    const systemManaged = layer === 0 && state.system?.enabled &&
+      state.system.keyActions?.some((item) => item.keyCode === physical?.code);
     const current = keymaps?.[layer]?.[key];
     $("remapAssignment").disabled = !loaded || key === 0;
     $("btnSaveRemap").disabled = !state.connected || gate.running ||
@@ -82,6 +85,8 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     }
     $("remapCurrent").textContent = current == null
       ? "Load the keyboard to edit mappings."
+      : systemManaged
+      ? `Onboard: ${describeHid(current)} · managed by System on this profile`
       : `Onboard: ${describeHid(current)}`;
   }
 

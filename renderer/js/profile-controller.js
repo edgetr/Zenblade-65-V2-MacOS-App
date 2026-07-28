@@ -1,5 +1,5 @@
 import { PROFILE_COUNT } from "./protocol.js";
-import { applyProfile } from "./device-ops.js";
+import { applyProfile, profileApplyComplete } from "./device-ops.js";
 
 export function createProfileController({
   kb,
@@ -7,6 +7,7 @@ export function createProfileController({
   state,
   gate,
   writeFeel,
+  writeSystem,
   sync,
   toast,
   onLightingRead,
@@ -32,9 +33,9 @@ export function createProfileController({
         if (!quiet) toast(`Profile ${target + 1} selected`, "ok");
         return { ok: true, localOnly: true };
       }
-      const result = await applyProfile(kb, state, writeFeel);
+      const result = await applyProfile(kb, state, writeFeel, writeSystem);
       if (result.lightingOk) onLightingApplied?.(state.lighting);
-      if (result.deviceProfileOk && result.lightingOk && result.feelOk) {
+      if (profileApplyComplete(result)) {
         setSyncIncomplete(null);
         if (!quiet) toast(`Profile ${target + 1} applied`, "ok");
         return { ok: true, result };
@@ -64,10 +65,10 @@ export function createProfileController({
   async function retry() {
     if (!state.syncIncomplete) return;
     const result = await gate.run("Profile recovery", () =>
-      applyProfile(kb, state, writeFeel)
+      applyProfile(kb, state, writeFeel, writeSystem)
     );
     if (result.lightingOk) onLightingApplied?.(state.lighting);
-    if (result.deviceProfileOk && result.lightingOk && result.feelOk) {
+    if (profileApplyComplete(result)) {
       setSyncIncomplete(null);
       toast("Profile fully re-applied", "ok");
     } else {
@@ -77,9 +78,9 @@ export function createProfileController({
 
   async function applyCurrentWithinGate({ quiet = false, silent = false } = {}) {
     if (!kb.connected) return { localOnly: true };
-    const result = await applyProfile(kb, state, writeFeel);
+    const result = await applyProfile(kb, state, writeFeel, writeSystem);
     if (result.lightingOk) onLightingApplied?.(state.lighting);
-    if (result.deviceProfileOk && result.lightingOk && result.feelOk) {
+    if (profileApplyComplete(result)) {
       setSyncIncomplete(null);
       if (!quiet) toast(`Profile ${state.profile + 1} applied`, "ok");
     } else {
@@ -105,6 +106,7 @@ export function createProfileController({
       profileOk: false,
       lightingOk: false,
       feelOk: !restoreFeel,
+      systemOk: !writeSystem,
     };
     try {
       const profile = Math.max(
@@ -135,8 +137,21 @@ export function createProfileController({
         result.feelError = error;
       }
     }
+    if (writeSystem && result.profileOk) {
+      try {
+        await writeSystem();
+        result.systemOk = true;
+      } catch (error) {
+        result.systemError = error;
+      }
+    }
     sync();
-    if (result.profileOk && result.lightingOk && result.feelOk) {
+    if (
+      result.profileOk &&
+      result.lightingOk &&
+      result.feelOk &&
+      result.systemOk
+    ) {
       setSyncIncomplete(null);
       // quiet suppresses automatic startup success; user Refresh still toasts.
       if (!quiet) toast("Synced", "ok");

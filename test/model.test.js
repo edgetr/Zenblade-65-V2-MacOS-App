@@ -22,7 +22,10 @@ import {
   lightingMatches,
   lightingColorUpdate,
 } from "../renderer/js/lighting-ui.js";
-import { DeviceOperationGate } from "../renderer/js/device-ops.js";
+import {
+  DeviceOperationGate,
+  profileApplyComplete,
+} from "../renderer/js/device-ops.js";
 import {
   colorFromWire,
   colorToWire,
@@ -59,6 +62,12 @@ import {
   effectPreviewSamples,
 } from "../renderer/js/lighting-preview.js";
 import { LAYOUT_KEY_COUNT, ROWS } from "../renderer/js/layout.js";
+import {
+  buildIndicatorOverlay,
+  buildKeyActionPlan,
+  hostShortcutMappings,
+  normalizeSystemProfile,
+} from "../renderer/js/system-data.js";
 import deviceIds from "../shared/device-ids.json" with { type: "json" };
 
 const codes = { KeyA: 0 };
@@ -67,6 +76,10 @@ const {
   assertSupportedProfileFile,
   parseFrontApplication,
 } = require("../electron/desktop.js");
+const {
+  normalizeAudio,
+  normalizeDetectors,
+} = require("../electron/system-bridge.js");
 const memory = () => {
   let value = null;
   return {
@@ -231,6 +244,14 @@ test("profile export and import round-trip through model validation", () => {
   const model = createModel({ storage: memory(), validCodes: codes });
   model.setLighting({ hue: 123, brightness: 64 });
   model.setOverride("KeyA", { press: 6, release: 7 });
+  model.setSystem({
+    enabled: true,
+    keyActions: [{
+      id: "page-next",
+      keyCode: "PGDN",
+      action: "media-next",
+    }],
+  });
   const exported = model.exportProfile();
   assert.equal(exported.format, "zenblade-profile");
   assert.equal(exported.version, 1);
@@ -250,6 +271,8 @@ test("profile export and import round-trip through model validation", () => {
     press: 6,
     release: 7,
   });
+  assert.equal(target.state.system.enabled, true);
+  assert.equal(target.state.system.keyActions[0].action, "media-next");
   assert.equal(target.state.keyOverrides.Unknown, undefined);
 });
 
@@ -395,6 +418,17 @@ test("device gate rejects overlapping operations without mutating control labels
   );
   await first;
   assert.equal(toasts[0][1], "error");
+});
+
+test("profile completion includes the per-profile System mapping", () => {
+  const base = {
+    deviceProfileOk: true,
+    lightingOk: true,
+    feelOk: true,
+    systemOk: true,
+  };
+  assert.equal(profileApplyComplete(base), true);
+  assert.equal(profileApplyComplete({ ...base, systemOk: false }), false);
 });
 
 test("only auto-selects supported Zenblade HID devices", () => {
@@ -829,11 +863,12 @@ test("keyboard-first navigation uses one board tab stop and app shortcuts", () =
     /interactive && rowIndex === 0 && col === 0 \? 0 : -1/,
   );
   assert.match(boardSource, /"ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"/);
-  assert.match(bootstrapSource, /\^\[1-5\]\$/);
+  assert.match(bootstrapSource, /\^\[1-6\]\$/);
   assert.match(bootstrapSource, /command && event\.key === "Enter"/);
   assert.match(mainSource, /accelerator: "CmdOrCtrl\+1"/);
   assert.match(mainSource, /accelerator: "CmdOrCtrl\+4"/);
   assert.match(mainSource, /accelerator: "CmdOrCtrl\+5"/);
+  assert.match(mainSource, /accelerator: "CmdOrCtrl\+6"/);
   assert.match(preloadSource, /onNavigate/);
   assert.match(bootstrapSource, /onNavigate\?\.\(\(panel\) => navigate\(panel\)\)/);
 });
@@ -881,4 +916,127 @@ test("SOCD config clamps profiles to ten safe hardware slots", () => {
     bottomOut: true,
   });
   assert.equal(normalizeSocdConfig({ slots: [{ mode: 0 }] }).slots[0].mode, 0);
+});
+
+test("system controls are per-profile, unique, and limited to spare keys", () => {
+  const profile = normalizeSystemProfile({
+    enabled: true,
+    keyActions: [
+      { id: "a", keyCode: "PGUP", action: "media-previous" },
+      { id: "duplicate", keyCode: "PGUP", action: "media-next" },
+      { id: "unsafe", keyCode: "A", action: "media-next" },
+      { id: "b", keyCode: "PGDN", action: "microphone-toggle" },
+    ],
+  });
+  assert.deepEqual(
+    profile.keyActions.map(({ keyCode, action }) => ({ keyCode, action })),
+    [
+      { keyCode: "PGUP", action: "media-previous" },
+      { keyCode: "PGDN", action: "microphone-toggle" },
+    ],
+  );
+  assert.deepEqual(buildKeyActionPlan({}, profile), [
+    { keyCode: "HOME", value: 74, kind: "restore" },
+    { keyCode: "PGUP", value: 188, kind: "action" },
+    { keyCode: "PGDN", value: 105, kind: "action" },
+    { keyCode: "END", value: 77, kind: "restore" },
+  ]);
+  assert.deepEqual(hostShortcutMappings(profile), [{
+    accelerator: "F14",
+    action: "microphone-toggle",
+    inputUid: "",
+    outputUid: "",
+  }]);
+});
+
+test("pausing system controls restores factory functions deterministically", () => {
+  const plan = buildKeyActionPlan({}, {
+    enabled: false,
+    keyActions: [
+      { id: "a", keyCode: "PGUP", action: "media-previous" },
+    ],
+  });
+  assert.deepEqual(plan.map(({ keyCode, value }) => [keyCode, value]), [
+    ["HOME", 74],
+    ["PGUP", 75],
+    ["PGDN", 78],
+    ["END", 77],
+  ]);
+});
+
+test("indicator overlay composes priority and describes an activity row", () => {
+  const profile = {
+    indicators: {
+      enabled: true,
+      rules: [
+        {
+          id: "agent",
+          enabled: true,
+          name: "Codex",
+          source: "process",
+          match: "codex",
+          targetType: "row",
+          row: 1,
+          color: "#3366ff",
+          priority: 40,
+        },
+        {
+          id: "mic",
+          enabled: true,
+          name: "Muted",
+          source: "mic-muted",
+          targetType: "key",
+          keyCode: "Q",
+          color: "#ff0000",
+          priority: 90,
+        },
+      ],
+    },
+  };
+  const overlay = buildIndicatorOverlay(profile, {
+    audio: { micMuted: true },
+    processes: { agent: true },
+  }, 0);
+  assert.equal(overlay.Q.color, "#ff0000");
+  assert.equal(overlay.Q.label, "Muted");
+  assert.equal(Object.keys(overlay).length, ROWS[1].length);
+  assert.equal(
+    overlay.W.activityIndex,
+    ROWS[1].findIndex((key) => key.code === "W"),
+  );
+  assert.equal(overlay.W.activityCount, ROWS[1].length);
+  assert.notDeepEqual(
+    buildIndicatorOverlay(profile, {
+      audio: { micMuted: true },
+      processes: { agent: true },
+    }, 1),
+    overlay,
+  );
+});
+
+test("process detectors are bounded, deduplicated, and require a match", () => {
+  assert.deepEqual(normalizeDetectors([
+    { id: "codex", match: " Codex " },
+    { id: "codex", match: "other" },
+    { id: "empty", match: "" },
+  ]), [{ id: "codex", match: "codex" }]);
+});
+
+test("native audio values are normalized to a boolean bridge contract", () => {
+  const audio = normalizeAudio({
+    micMuted: 1,
+    canMuteInput: 0,
+    devices: [{
+      uid: "input",
+      input: 1,
+      output: 0,
+      defaultInput: 1,
+      defaultOutput: 0,
+    }],
+  });
+  assert.equal(audio.micMuted, true);
+  assert.equal(audio.canMuteInput, false);
+  assert.equal(audio.devices[0].input, true);
+  assert.equal(audio.devices[0].output, false);
+  assert.equal(audio.devices[0].defaultInput, true);
 });

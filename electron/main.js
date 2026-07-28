@@ -9,6 +9,7 @@ const {
   nativeImage,
   Tray,
   dialog,
+  globalShortcut,
   powerMonitor,
 } = require("electron");
 const path = require("path");
@@ -18,6 +19,7 @@ const {
   getFrontApplication,
   readApplicationMetadata,
 } = require("./desktop.js");
+const { createSystemBridge } = require("./system-bridge.js");
 const {
   vendorId: PWNAGE_VID,
   productIds: ZENBLADE_PID_LIST,
@@ -69,11 +71,15 @@ let foregroundTimer = null;
 let foregroundBusy = false;
 let activeApplication = null;
 let isQuitting = false;
+let systemBridge = null;
+const registeredSystemShortcuts = new Set();
 const desktopState = {
   connected: false,
   profile: 0,
   lightingOn: true,
   automationEnabled: false,
+  systemEnabled: false,
+  micMuted: false,
 };
 
 function sendToRenderer(channel, ...args) {
@@ -134,6 +140,22 @@ function buildTrayMenu() {
       type: "checkbox",
       checked: desktopState.automationEnabled,
       click: () => sendToRenderer("app:toggleAutomation"),
+    },
+    {
+      label: desktopState.micMuted ? "Unmute microphone" : "Mute microphone",
+      enabled: desktopState.systemEnabled,
+      click: async () => {
+        try {
+          const audio = await systemBridge?.perform({
+            action: "microphone-toggle",
+          });
+          desktopState.micMuted = audio?.micMuted === true;
+          sendToRenderer("app:systemContext", { audio });
+          buildTrayMenu();
+        } catch {
+          showMainWindow("system");
+        }
+      },
     },
     { type: "separator" },
     {
@@ -323,6 +345,11 @@ function buildMenu() {
             accelerator: "CmdOrCtrl+5",
             click: () => navigate("advanced"),
           },
+          {
+            label: "System",
+            accelerator: "CmdOrCtrl+6",
+            click: () => navigate("system"),
+          },
           { type: "separator" },
           { role: "reload" },
           { role: "toggleDevTools" },
@@ -375,6 +402,10 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
     app.dock.setIcon(icon);
   }
   configureHid(session.defaultSession);
+  systemBridge = createSystemBridge({
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+  });
   buildMenu();
   createWindow();
   createTray();
@@ -396,6 +427,8 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
       profile: Math.max(0, Math.min(2, Number(next?.profile) | 0)),
       lightingOn: next?.lightingOn !== false,
       automationEnabled: next?.automationEnabled === true,
+      systemEnabled: next?.systemEnabled === true,
+      micMuted: next?.micMuted === true,
     });
     if (desktopState.automationEnabled && !automationWasEnabled) {
       startForegroundMonitor();
@@ -403,6 +436,46 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
       stopForegroundMonitor();
     }
     buildTrayMenu();
+  });
+  ipcMain.handle("app:getSystemContext", async (_event, detectors) => {
+    return systemBridge.getContext(detectors);
+  });
+  ipcMain.handle("app:performSystemAction", async (_event, value) => {
+    const audio = await systemBridge.perform(value);
+    desktopState.micMuted = audio?.micMuted === true;
+    buildTrayMenu();
+    return audio;
+  });
+  ipcMain.handle("app:configureSystemShortcuts", (_event, mappings) => {
+    for (const accelerator of registeredSystemShortcuts) {
+      globalShortcut.unregister(accelerator);
+    }
+    registeredSystemShortcuts.clear();
+    const failures = [];
+    for (const value of Array.isArray(mappings) ? mappings : []) {
+      const accelerator = String(value?.accelerator || "");
+      if (!/^F(1[3-9]|2[0-4])$/.test(accelerator)) continue;
+      const mapping = {
+        action: String(value?.action || ""),
+        inputUid: String(value?.inputUid || ""),
+        outputUid: String(value?.outputUid || ""),
+      };
+      const ok = globalShortcut.register(accelerator, () => {
+        systemBridge.perform(mapping).then((audio) => {
+          desktopState.micMuted = audio?.micMuted === true;
+          sendToRenderer("app:systemContext", { audio });
+          buildTrayMenu();
+        }).catch((error) => {
+          sendToRenderer("app:systemActionError", error?.message || String(error));
+        });
+      });
+      if (ok) registeredSystemShortcuts.add(accelerator);
+      else failures.push(accelerator);
+    }
+    return {
+      registered: [...registeredSystemShortcuts],
+      failures,
+    };
   });
   ipcMain.handle("app:chooseApplications", async () => {
     const result = await dialog.showOpenDialog(dialogParent(), {
@@ -488,4 +561,5 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   isQuitting = true;
   stopForegroundMonitor();
+  if (app.isReady()) globalShortcut.unregisterAll();
 });

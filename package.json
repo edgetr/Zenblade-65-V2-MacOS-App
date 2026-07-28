@@ -1,7 +1,7 @@
 {
   "name": "zenblade",
   "productName": "Zenblade",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Mac app for the Pwnage Zenblade 65 V2 keyboard",
   "main": "electron/main.js",
   "author": "edgetr",
@@ -12,9 +12,10 @@
   },
   "homepage": "https://github.com/edgetr/Zenblade-65-V2-MacOS-App",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
-    "build": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
+    "start": "npm run build:native && electron .",
+    "dev": "npm run build:native && electron . --dev",
+    "build:native": "bash scripts/build-native.sh",
+    "build": "npm run build:native && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
     "install-app": "bash scripts/install.sh",
     "update": "bash scripts/install.sh",
     "test": "node --experimental-default-type=module --test"
@@ -37,6 +38,12 @@
       "build/icon.png",
       "build/icon.icns",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/zenbridge",
+        "to": "zenbridge"
+      }
     ],
     "mac": {
       "category": "public.app-category.utilities",

@@ -36,8 +36,18 @@ export function buildActuationMatrix(state, keyCount, indexForCode) {
   return { pressValues, releaseValues };
 }
 
-export async function applyProfile(kb, state, writeFeel) {
-  const result = { deviceProfileOk: false, lightingOk: false, feelOk: false };
+export function profileApplyComplete(result) {
+  return !!result?.deviceProfileOk && !!result?.lightingOk &&
+    !!result?.feelOk && result?.systemOk !== false;
+}
+
+export async function applyProfile(kb, state, writeFeel, writeSystem) {
+  const result = {
+    deviceProfileOk: false,
+    lightingOk: false,
+    feelOk: false,
+    systemOk: !writeSystem,
+  };
   try {
     await kb.writeProfile(state.profile);
     result.deviceProfileOk = true;
@@ -56,6 +66,14 @@ export async function applyProfile(kb, state, writeFeel) {
     result.feelOk = true;
   } catch (error) {
     result.feelError = error;
+  }
+  if (writeSystem) {
+    try {
+      await writeSystem();
+      result.systemOk = true;
+    } catch (error) {
+      result.systemError = error;
+    }
   }
   return result;
 }

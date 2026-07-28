@@ -1,5 +1,9 @@
 import { normalizeLighting, PROFILE_COUNT } from "./protocol.js";
 import { clamp } from "./color.js";
+import {
+  defaultSystemProfile,
+  normalizeSystemProfile,
+} from "./system-data.js";
 
 export const STORAGE_KEY = "zenblade.profiles.v2";
 export const deepClone = (value) => JSON.parse(JSON.stringify(value));
@@ -24,6 +28,7 @@ export const defaultProfile = () => ({
   actuation: defaultActuation(),
   keyOverrides: {},
   appNotes: {},
+  system: defaultSystemProfile(),
 });
 
 export const defaultAutomation = () => ({
@@ -98,6 +103,7 @@ export function normalizeStore(raw, validCodes = {}) {
     const a = src.actuation || {};
     p.lighting = normalizeLighting(l, defaultLighting());
     p.actuation = normalizeActuation(a, defaultActuation());
+    p.system = normalizeSystemProfile(src.system);
     for (const [code, ov] of Object.entries(src.keyOverrides || {})) {
       if (validCodes[code] != null && ov && typeof ov === "object") {
         p.keyOverrides[code] = {

@@ -18,6 +18,9 @@ A free, open-source macOS controller for the **Pwnage Zenblade 65 V2** keyboard.
 - Remap all 68 keys across six onboard layers.
 - Configure ten SOCD pairs independently for each hardware profile.
 - Record and edit sixteen onboard macro slots using the keyboard.
+- Turn Home, Page Up, Page Down, or End into onboard media controls per profile.
+- Switch macOS audio inputs and outputs, toggle microphone mute, and apply a profile-specific meeting setup.
+- Build configurable microphone and process-aware status maps with editable colors, priorities, keys, and animated activity rows.
 - Keep three local profiles with independent lighting, feel, and per-key settings.
 - Switch profiles automatically for applications chosen by the user.
 - Control profiles, lighting, and reconnect from the macOS menu bar.
@@ -35,6 +38,7 @@ The preview represents the exact digital values sent by the app. A monitor and p
 - An Apple-silicon Mac.
 - A recent macOS release.
 - Node.js 22.12 or newer (the current LTS release is recommended).
+- Xcode Command Line Tools for compiling the small native CoreAudio bridge.
 - A Pwnage Zenblade 65 V2 connected over USB.
 
 The HID filters currently accept vendor ID `0x3662` with product IDs `0x1001` and `0x1002`. Unsupported keyboards are not selected automatically.
@@ -120,6 +124,19 @@ Select **Load keyboard** before editing advanced controls. This reads the real o
 
 Every advanced save reads the setting back from the keyboard and reports an error if the stored data does not match.
 
+### System
+
+The **System** page links spare keyboard keys to macOS without introducing an arbitrary script runner.
+
+- **Key controls** owns only Home, Page Up, Page Down, and End while enabled. Media functions use the keyboard’s verified onboard keycodes, so playback and volume continue working if the app window is closed. Microphone and audio-route actions use reserved F13–F24 triggers and the native app bridge.
+- **Meeting setup** stores an input and output device independently for each profile. Apply it from the page or map it to one of the four control keys; it selects both devices and unmutes the chosen microphone.
+- **Status map** watches microphone mute state or a user-supplied process-name fragment. Rules choose their own color, key or activity row, and priority. Mic and action rules may intentionally share a key because input mappings and status colors are separate layers.
+- **Quick presets** provide editable starting points for muted microphone, Codex, Claude Code, and Grok. They are ordinary rules after creation: names, process matches, targets, priorities, and colors remain fully customizable.
+
+The Zenblade V2 firmware currently exposes whole-board lighting parameters but no per-key RGB framebuffer. The app therefore renders status rules in its live keyboard map and never replaces the physical keyboard’s selected lighting effect with a misleading whole-board color. The status engine and rendering output are isolated so a future verified per-key protocol or firmware can drive the same rules physically.
+
+System controls and indicators are stored inside each Zenblade profile and are included in profile exports. Pausing controls or removing a key assignment restores Home, Page Up, Page Down, and End to their factory functions the next time controls are synced. Process matching and audio inspection remain entirely local to the Mac.
+
 ### Automatic switching
 
 Automatic switching starts with no application rules. In **Profiles**:
@@ -143,13 +160,15 @@ Zenblade is a small Electron application with no renderer framework or productio
 
 | Area | Main files | Responsibility |
 | --- | --- | --- |
-| Electron host | `electron/main.js`, `electron/preload.js`, `electron/desktop.js` | Window/tray lifecycle, foreground-app metadata, file dialogs, power events, macOS menu, HID permission bridge |
+| Electron host | `electron/main.js`, `electron/preload.js`, `electron/desktop.js`, `electron/system-bridge.js` | Window/tray lifecycle, foreground-app metadata, local process matching, native audio routing, file dialogs, power events, macOS menu, HID permission bridge |
+| Native macOS bridge | `native/zenbridge.m`, `scripts/build-native.sh` | CoreAudio device discovery/default routing and microphone mute without shell interpolation or third-party runtime dependencies |
 | App orchestration | `renderer/js/app.js`, `renderer/js/bootstrap-ui.js`, `renderer/js/desktop-controller.js` | Connect/recovery flow, app-aware switching, tray state, operation gating, navigation, top-level UI synchronization |
 | HID protocol | `renderer/js/protocol.js`, `shared/device-ids.json` | Device filtering, command queue, 8 × 9 matrix packing, lighting/profile/actuation, remapping, SOCD, and macro reads/writes |
 | State and persistence | `renderer/js/state.js`, `renderer/js/store.js` | Profile model, validation, migration, debounced `localStorage` persistence |
 | Lighting | `renderer/js/lighting-modes.js`, `lighting-ui.js`, `lighting-preview.js`, `preview.js` | Fixed firmware IDs, control visibility, wire-quantized colors, effect preview recipes |
 | Keyboard and feel | `renderer/js/board.js`, `key-editor.js`, `layout.js`, `device-ops.js` | 68-key layout, responsive rendering, per-key overrides, full 72-cell firmware matrices |
 | Advanced controls | `renderer/js/advanced-ui.js`, `advanced-data.js` | Keyboard-first remapping, SOCD pairs, macro recording, and hardware read-back verification |
+| System controls | `renderer/js/system-ui.js`, `system-data.js` | Per-profile media mappings, audio scenes, process/microphone context, status composition, and deterministic key restoration |
 | Presentation | `renderer/index.html`, `renderer/css/` | Accessible semantic controls and native macOS-oriented visual styling |
 | Tests | `test/model.test.js` | Model boundaries, HID packing/matching, mode integrity, preview behavior, regressions |
 
@@ -171,6 +190,8 @@ flowchart LR
 - Rich HID responses must match the complete command prefix; matching only the first byte can resolve the wrong queued command.
 - Actuation writes translate 68 logical keys into the firmware's full 72-cell matrix. Preserve `LOGICAL_MATRIX_POSITIONS`, `CODE_TO_MATRIX_INDEX`, and their round-trip tests.
 - Keep hardware work inside `DeviceOperationGate` so overlapping writes cannot corrupt the command queue.
+- Keep System key ownership limited to Home/Page Up/Page Down/End, and restore all four deterministically when the feature is paused.
+- Do not claim physical per-key status lighting unless a verified framebuffer protocol is added. Whole-board color replacement is not an acceptable fallback.
 - Keep `contextIsolation` enabled, renderer Node integration disabled, and HID permissions narrowly scoped.
 - Previews should use the same wire conversions as device writes. Do not add cosmetic brightness floors or color whitening to the key fill.
 - Preserve unknown legacy profile fields when practical so upgrades do not destroy local user data.
@@ -194,8 +215,9 @@ An effective prompt for a coding agent should point it to this Architecture sect
 | Command | Purpose |
 | --- | --- |
 | `npm test` | Run the Node test suite |
-| `npm start` | Run the app from source |
-| `npm run dev` | Run from source with DevTools |
+| `npm start` | Compile the native bridge and run the app from source |
+| `npm run dev` | Compile the native bridge and run from source with DevTools |
+| `npm run build:native` | Compile the arm64 CoreAudio helper |
 | `npm run build` | Build the unpacked Apple-silicon app |
 | `npm run install-app` | Build, sign, install, and open `/Applications/Zenblade.app` |
 

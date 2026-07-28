@@ -5,13 +5,18 @@ import { createBoard } from "./board.js";
 import { createLightingUi } from "./lighting-ui.js";
 import { createKeyEditor } from "./key-editor.js";
 import { createProfilesUi } from "./profiles-ui.js";
-import { buildActuationMatrix, DeviceOperationGate } from "./device-ops.js";
+import {
+  buildActuationMatrix,
+  DeviceOperationGate,
+  profileApplyComplete,
+} from "./device-ops.js";
 import { createProfileController } from "./profile-controller.js";
 import { applyTheme } from "./theme.js";
 import { initHelpTips } from "./help-tips.js";
 import { installBootstrapUi } from "./bootstrap-ui.js";
 import { createDesktopController } from "./desktop-controller.js";
 import { createAdvancedUi } from "./advanced-ui.js";
+import { createSystemUi } from "./system-ui.js";
 import { $ } from "./dom.js";
 
 const kb = new ZenbladeDevice();
@@ -29,7 +34,13 @@ function toast(message, kind = "") {
   el._timer = setTimeout(() => el.classList.remove("is-show"), 2800);
 }
 
-const ui = { lighting: null, profiles: null, desktop: null, advanced: null };
+const ui = {
+  lighting: null,
+  profiles: null,
+  desktop: null,
+  advanced: null,
+  system: null,
+};
 
 function syncChrome() {
   const connected = state.connected;
@@ -52,6 +63,7 @@ function syncChrome() {
   document.documentElement.toggleAttribute("data-device-busy", running);
   ui.desktop?.report();
   ui.advanced?.sync();
+  ui.system?.sync();
 }
 
 const gate = new DeviceOperationGate({
@@ -69,6 +81,7 @@ function setConnected(on, info) {
   syncChrome();
   ui.profiles?.sync();
   ui.advanced?.connectionChanged();
+  ui.system?.connectionChanged();
   ui.desktop?.connectionChanged();
 }
 
@@ -79,7 +92,7 @@ const board = createBoard({
     syncChrome();
   },
   // Intentionally no onPaint → lighting.sync(): selection/override paints must
-  // not rewrite the 67-key Lights preview. Theme is applied from lighting.sync.
+  // not rewrite the 68-key Lights preview. Theme is applied from lighting.sync.
 });
 
 ui.lighting = createLightingUi({
@@ -119,6 +132,7 @@ function syncAll() {
   editor.syncFeel();
   if (!state.selectedKey) editor.clear();
   ui.profiles?.sync();
+  ui.system?.sync();
   board.paint();
   syncChrome();
 }
@@ -129,6 +143,7 @@ const profileController = createProfileController({
   state,
   gate,
   writeFeel,
+  writeSystem: () => ui.system?.applyMappingsWithinGate(),
   sync: syncAll,
   toast,
   onLightingRead: lighting.markApplied,
@@ -172,7 +187,7 @@ ui.profiles = createProfilesUi({
     });
     if (
       applied.localOnly ||
-      (applied.deviceProfileOk && applied.lightingOk && applied.feelOk)
+      profileApplyComplete(applied)
     ) {
       toast(
         applied.localOnly
@@ -189,6 +204,16 @@ ui.advanced = createAdvancedUi({
   kb,
   state,
   gate,
+  toast,
+  onChromeChange: syncChrome,
+});
+
+ui.system = createSystemUi({
+  kb,
+  model,
+  state,
+  gate,
+  board,
   toast,
   onChromeChange: syncChrome,
 });
@@ -256,5 +281,6 @@ ui.desktop = createDesktopController({
   toast,
   recoverConnection: bootstrap.recoverWithRetry,
   cancelRecovery: bootstrap.cancelRecovery,
+  systemStatus: () => ui.system?.report?.(),
 });
 syncAll();

@@ -1,6 +1,7 @@
 import { deepClone } from "./store.js";
 import { pickZenbladeDevice } from "./protocol.js";
 import { runRecoverySequence } from "./desktop-controller.js";
+import { profileApplyComplete } from "./device-ops.js";
 import { $ } from "./dom.js";
 
 export function installBootstrapUi({
@@ -78,7 +79,14 @@ export function installBootstrapUi({
     lighting.visibility();
   });
   const navigate = (panel, { focus = true } = {}) => {
-    if (!["keyboard", "lighting", "actuation", "profiles", "advanced"].includes(panel)) return;
+    if (![
+      "keyboard",
+      "lighting",
+      "actuation",
+      "profiles",
+      "advanced",
+      "system",
+    ].includes(panel)) return;
     setActivePanel(panel);
     if (focus) document.querySelector(`[data-panel="${panel}"]`)?.focus();
     board.scheduleScale();
@@ -88,9 +96,16 @@ export function installBootstrapUi({
   window.zenShell?.onNavigate?.((panel) => navigate(panel));
   document.addEventListener("keydown", (event) => {
     const command = event.metaKey || event.ctrlKey;
-    if (command && !event.altKey && !event.shiftKey && /^[1-5]$/.test(event.key)) {
+    if (command && !event.altKey && !event.shiftKey && /^[1-6]$/.test(event.key)) {
       event.preventDefault();
-      const panel = ["keyboard", "lighting", "actuation", "profiles", "advanced"][
+      const panel = [
+        "keyboard",
+        "lighting",
+        "actuation",
+        "profiles",
+        "advanced",
+        "system",
+      ][
         Number(event.key) - 1
       ];
       // macOS routes Command-number through the native View menu. Keeping the
@@ -140,8 +155,7 @@ export function installBootstrapUi({
     });
   }
   let recoveryPromise = null;
-  const profileApplied = (result) =>
-    result?.deviceProfileOk && result?.lightingOk && result?.feelOk;
+  const profileApplied = profileApplyComplete;
   const recoverConnection = ({ quiet = false, device = null } = {}) => {
     if (recoveryPromise) return recoveryPromise;
     recoveryPromise = (async () => {

@@ -428,23 +428,28 @@ export class ZenbladeDevice {
   async readKeymap() {
     const layers = [];
     for (let layer = 0; layer < LAYER_COUNT; layer++) {
-      const matrix = [];
-      let offset = layer * MATRIX_KEY_COUNT * 2;
-      for (const length of [56, 56, 32]) {
-        const bytes = await this.execute(
-          [18, offset >> 8, offset & 255, length],
-          4,
-        );
-        matrix.push(...bytes.slice(0, length));
-        offset += length;
-      }
-      const values = [];
-      for (let index = 0; index < MATRIX_KEY_COUNT; index++) {
-        values.push((matrix[index * 2] << 8) | matrix[index * 2 + 1]);
-      }
-      layers.push(matrixValuesToLogical(values));
+      layers.push(await this.readKeymapLayer(layer));
     }
     return layers;
+  }
+
+  async readKeymapLayer(layer = 0) {
+    const safeLayer = clampInt(layer, 0, LAYER_COUNT - 1);
+    const matrix = [];
+    let offset = safeLayer * MATRIX_KEY_COUNT * 2;
+    for (const length of [56, 56, 32]) {
+      const bytes = await this.execute(
+        [18, offset >> 8, offset & 255, length],
+        4,
+      );
+      matrix.push(...bytes.slice(0, length));
+      offset += length;
+    }
+    const values = [];
+    for (let index = 0; index < MATRIX_KEY_COUNT; index++) {
+      values.push((matrix[index * 2] << 8) | matrix[index * 2 + 1]);
+    }
+    return matrixValuesToLogical(values);
   }
 
   async writeKeymapKey(layer, logicalIndex, keycode) {

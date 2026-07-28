@@ -3,7 +3,7 @@ import {
   keyDisplayColor,
   keyOverrideDisplayColor,
 } from "./preview.js";
-import { rgbToCss } from "./color.js";
+import { hexToRgb, rgbToCss } from "./color.js";
 import { $ } from "./dom.js";
 
 export function createBoard({ state, onSelect, onPaint } = {}) {
@@ -64,19 +64,39 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
       solid = L.mode === 1 || L.mode === 0 || !L.isOn,
       lit = L.isOn && L.mode !== 0;
     root.querySelectorAll(".key").forEach((key) => {
+      const status = state.statusOverlay?.[key.dataset.code];
       const override = !!state.keyOverrides[key.dataset.code];
       key.classList.toggle("is-override", override);
+      key.classList.toggle("is-status", !!status);
+      key.classList.toggle("is-activity", status?.activityIndex != null);
       key.classList.toggle(
         "is-selected",
         state.selectedKey === key.dataset.code,
       );
-      const rgb = override
+      if (status?.activityIndex != null) {
+        key.style.setProperty("--activity-index", status.activityIndex);
+        key.style.setProperty("--activity-count", status.activityCount);
+      } else {
+        key.style.removeProperty("--activity-index");
+        key.style.removeProperty("--activity-count");
+      }
+      const baseRgb = override
         ? keyOverrideDisplayColor(L, pos(key))
         : keyDisplayColor(
           L,
           solid ? { col: 0, row: 0, colCount: 1, rowCount: 1 } : pos(key),
         );
-      applyPaint(key, rgb, lit || override);
+      const statusRgb = status ? hexToRgb(status.color) : null;
+      const intensity = status?.intensity ?? 1;
+      const rgb = statusRgb
+        ? {
+          r: Math.round(statusRgb.r * intensity),
+          g: Math.round(statusRgb.g * intensity),
+          b: Math.round(statusRgb.b * intensity),
+        }
+        : baseRgb;
+      key.title = status?.label || "";
+      applyPaint(key, rgb, !!statusRgb || lit || override);
     });
   }
 
@@ -85,8 +105,9 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
     paintRaf = requestAnimationFrame(() => {
       paintRaf = 0;
       paintRoot($("keyboardBoard"));
+      paintRoot($("indicatorBoard"));
       // Selection/override-only paints must not re-sync lighting UI / rewrite
-      // the 67-key effect preview. Callers that change lighting invoke
+      // the 68-key effect preview. Callers that change lighting invoke
       // lighting.sync() themselves.
       onPaint?.();
     });
@@ -120,6 +141,7 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
   }
 
   render($("keyboardBoard"), true);
+  if ($("indicatorBoard")) render($("indicatorBoard"), false);
   $("keyboardBoard").addEventListener("click", (e) => {
     const key = e.target.closest(".key");
     if (key) {

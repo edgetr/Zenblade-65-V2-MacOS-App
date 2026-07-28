@@ -6,6 +6,7 @@ import {
   normalizeStore,
   saveStore,
 } from "./store.js";
+import { normalizeSystemProfile } from "./system-data.js";
 import { normalizeLighting, PROFILE_COUNT } from "./protocol.js";
 
 export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
@@ -18,9 +19,11 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     actuation: deepClone(current.actuation),
     keyOverrides: deepClone(current.keyOverrides),
     appNotes: deepClone(current.appNotes),
+    system: deepClone(current.system),
     automation: deepClone(store.automation),
     selectedKey: null,
     syncIncomplete: null,
+    statusOverlay: {},
   };
   let timer = 0;
   let saved = "";
@@ -31,6 +34,7 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
       actuation: deepClone(state.actuation),
       keyOverrides: deepClone(state.keyOverrides),
       appNotes: deepClone(state.appNotes),
+      system: deepClone(state.system),
     };
     store.activeProfile = state.profile;
     store.automation = deepClone(state.automation);
@@ -92,6 +96,23 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     return state.automation;
   };
 
+  const setSystem = (partial) => {
+    state.system = normalizeSystemProfile({
+      ...state.system,
+      ...partial,
+      audio: {
+        ...state.system.audio,
+        ...partial?.audio,
+      },
+      indicators: {
+        ...state.system.indicators,
+        ...partial?.indicators,
+      },
+    });
+    persist(true);
+    return state.system;
+  };
+
   const replaceProfile = (index, profile) => {
     snapshot();
     const profileIndex = Math.max(
@@ -112,6 +133,7 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
       state.actuation = next.actuation;
       state.keyOverrides = next.keyOverrides;
       state.appNotes = next.appNotes;
+      state.system = next.system;
       state.selectedKey = null;
     }
     persist(true);
@@ -143,6 +165,7 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     state.actuation = p.actuation;
     state.keyOverrides = p.keyOverrides;
     state.appNotes = p.appNotes;
+    state.system = p.system;
     state.selectedKey = null;
     persist(true);
     return state;
@@ -156,6 +179,7 @@ export function createModel({ storage, validCodes, debounceMs = 220 } = {}) {
     setOverride,
     resetOverride,
     setAutomation,
+    setSystem,
     replaceProfile,
     exportProfile,
     selectProfile,

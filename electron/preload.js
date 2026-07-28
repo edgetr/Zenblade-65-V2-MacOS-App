@@ -6,6 +6,12 @@ contextBridge.exposeInMainWorld("zenShell", {
   chooseApplications: () => ipcRenderer.invoke("app:chooseApplications"),
   exportProfile: (payload) => ipcRenderer.invoke("app:exportProfile", payload),
   importProfile: (profile) => ipcRenderer.invoke("app:importProfile", profile),
+  getSystemContext: (detectors) =>
+    ipcRenderer.invoke("app:getSystemContext", detectors),
+  performSystemAction: (value) =>
+    ipcRenderer.invoke("app:performSystemAction", value),
+  configureSystemShortcuts: (mappings) =>
+    ipcRenderer.invoke("app:configureSystemShortcuts", mappings),
   setDesktopState: (state) => ipcRenderer.send("app:setDesktopState", state),
   onReconnect: (cb) => {
     const handler = () => cb();
@@ -46,5 +52,15 @@ contextBridge.exposeInMainWorld("zenShell", {
     const handler = () => cb();
     ipcRenderer.on("app:suspend", handler);
     return () => ipcRenderer.removeListener("app:suspend", handler);
+  },
+  onSystemContext: (cb) => {
+    const handler = (_event, context) => cb(context);
+    ipcRenderer.on("app:systemContext", handler);
+    return () => ipcRenderer.removeListener("app:systemContext", handler);
+  },
+  onSystemActionError: (cb) => {
+    const handler = (_event, message) => cb(message);
+    ipcRenderer.on("app:systemActionError", handler);
+    return () => ipcRenderer.removeListener("app:systemActionError", handler);
   },
 });

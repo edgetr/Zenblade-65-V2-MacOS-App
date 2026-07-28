@@ -73,6 +73,16 @@
             </span>
             <span class="label">Advanced</span>
           </button>
+          <button class="nav__btn" data-panel="system">
+            <span class="nav__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M4 7h16M4 12h10M4 17h7" stroke-linecap="round" />
+                <circle cx="18" cy="12" r="2" />
+                <circle cx="15" cy="17" r="2" />
+              </svg>
+            </span>
+            <span class="label">System</span>
+          </button>
         </nav>
       </aside>
 
@@ -468,6 +478,181 @@
                 <ol class="macro-actions" id="macroActions"></ol>
                 <p class="advanced-note" id="macroEmpty">Load a macro slot, then record keys or add an action.</p>
               </article>
+            </div>
+          </section>
+
+          <section class="panel" id="panel-system">
+            <div class="panel__intro">
+              <div>
+                <p class="panel__eyebrow">Desktop link</p>
+                <h2>Let the keyboard understand your Mac</h2>
+                <p>Give spare keys useful controls, set a meeting route, and build a status map without changing how the rest of your keyboard behaves.</p>
+              </div>
+              <span class="shortcut-hint" aria-label="Keyboard shortcut Command 6">⌘6</span>
+            </div>
+
+            <div class="system-livebar" id="systemLivebar">
+              <span class="system-livebar__dot" aria-hidden="true"></span>
+              <strong id="systemLiveTitle">Profile 1 system controls are paused</strong>
+              <span id="systemLiveDetail">Settings stay saved until you enable them.</span>
+            </div>
+
+            <div class="system-grid">
+              <article class="card system-card system-card--actions">
+                <div class="card-toolbar">
+                  <div>
+                    <p class="panel__eyebrow">Per profile</p>
+                    <h3 class="card__title">Key controls</h3>
+                  </div>
+                  <label class="switch switch--compact">
+                    <input type="checkbox" id="systemEnabled" />
+                    <span>Enabled</span>
+                  </label>
+                </div>
+                <p class="system-card__copy">Only Home, Page Up, Page Down, and End are available here. Remove a control or pause this profile to restore their factory functions.</p>
+                <div class="system-quick">
+                  <button type="button" class="btn btn--primary btn--sm" id="btnMediaPair">Use Page keys for tracks</button>
+                  <button type="button" class="btn btn--ghost btn--sm" id="btnAddSystemAction">Add control</button>
+                </div>
+                <div class="system-list" id="systemActionList"></div>
+                <p class="system-empty" id="systemActionEmpty">No desktop controls on this profile.</p>
+                <div class="system-footer">
+                  <span id="systemMappingStatus">Connect the keyboard to sync controls.</span>
+                  <button type="button" class="btn btn--primary btn--sm" id="btnSyncSystemMappings">Sync controls</button>
+                </div>
+              </article>
+
+              <article class="card system-card system-card--audio">
+                <div class="card-toolbar">
+                  <div>
+                    <p class="panel__eyebrow">Audio scene</p>
+                    <h3 class="card__title">Meeting setup</h3>
+                  </div>
+                  <span class="mic-pill" id="systemMicState">Checking mic…</span>
+                </div>
+                <p class="system-card__copy">Choose the devices this profile should use. “Apply meeting setup” switches both and unmutes the microphone.</p>
+                <div class="system-audio-fields">
+                  <label class="select-field">
+                    <span>Microphone</span>
+                    <select class="select-input" id="systemInputDevice"></select>
+                  </label>
+                  <label class="select-field">
+                    <span>Output</span>
+                    <select class="select-input" id="systemOutputDevice"></select>
+                  </label>
+                </div>
+                <div class="btn-row">
+                  <button type="button" class="btn btn--primary btn--sm" id="btnApplyMeeting">Apply meeting setup</button>
+                  <button type="button" class="btn btn--ghost btn--sm" id="btnToggleSystemMic">Toggle microphone</button>
+                </div>
+              </article>
+
+              <article class="card system-card system-card--indicators">
+                <div class="card-toolbar">
+                  <div>
+                    <p class="panel__eyebrow">Context layer</p>
+                    <h3 class="card__title">Status map</h3>
+                  </div>
+                  <label class="switch switch--compact">
+                    <input type="checkbox" id="indicatorEnabled" />
+                    <span>Preview</span>
+                  </label>
+                </div>
+                <div class="system-capability">
+                  <strong>Prepared for per-key output</strong>
+                  <span>The current Zenblade firmware exposes only whole-board RGB. Status colors stay in this live map instead of overwriting your lighting effect.</span>
+                </div>
+                <div class="system-presets" aria-label="Quick indicator presets">
+                  <button type="button" class="status-preset" data-indicator-preset="mic">Muted mic</button>
+                  <button type="button" class="status-preset" data-indicator-preset="codex">Codex</button>
+                  <button type="button" class="status-preset" data-indicator-preset="claude">Claude Code</button>
+                  <button type="button" class="status-preset" data-indicator-preset="grok">Grok</button>
+                  <button type="button" class="status-preset" data-indicator-preset="activity">Agent activity row</button>
+                  <button type="button" class="status-preset" id="btnAddIndicator">Custom</button>
+                </div>
+                <div class="board-wrap system-board-wrap">
+                  <div class="board system-board" id="indicatorBoard" aria-label="Live status map"></div>
+                </div>
+                <div class="system-list system-list--rules" id="indicatorRuleList"></div>
+                <p class="system-empty" id="indicatorEmpty">Add an indicator to make this map context aware.</p>
+              </article>
+            </div>
+
+            <div class="system-editor" id="systemActionEditor" hidden>
+              <div class="system-editor__surface" role="dialog" aria-modal="true" aria-labelledby="systemActionEditorTitle">
+                <div class="card-toolbar">
+                  <h3 class="card__title" id="systemActionEditorTitle">Add control</h3>
+                  <button type="button" class="btn btn--ghost btn--sm" id="btnCancelSystemAction">Cancel</button>
+                </div>
+                <div class="advanced-fields">
+                  <label class="select-field">
+                    <span>Key</span>
+                    <select class="select-input" id="systemActionKey"></select>
+                  </label>
+                  <label class="select-field advanced-field--wide">
+                    <span>Function</span>
+                    <select class="select-input" id="systemActionType"></select>
+                  </label>
+                </div>
+                <button type="button" class="btn btn--primary" id="btnSaveSystemAction">Add control</button>
+              </div>
+            </div>
+
+            <div class="system-editor" id="indicatorEditor" hidden>
+              <div class="system-editor__surface" role="dialog" aria-modal="true" aria-labelledby="indicatorEditorTitle">
+                <div class="card-toolbar">
+                  <h3 class="card__title" id="indicatorEditorTitle">Add indicator</h3>
+                  <button type="button" class="btn btn--ghost btn--sm" id="btnCancelIndicator">Cancel</button>
+                </div>
+                <div class="indicator-editor-grid">
+                  <label class="select-field">
+                    <span>When</span>
+                    <select class="select-input" id="indicatorSource">
+                      <option value="mic-muted">Microphone is muted</option>
+                      <option value="mic-live">Microphone is live</option>
+                      <option value="process">A process is running</option>
+                    </select>
+                  </label>
+                  <label class="text-field">
+                    <span>Name</span>
+                    <input class="text-input" id="indicatorName" maxlength="60" placeholder="Build running" />
+                  </label>
+                  <label class="text-field" id="indicatorMatchField">
+                    <span>Process contains · comma means any</span>
+                    <input class="text-input" id="indicatorMatch" maxlength="80" placeholder="codex, claude" />
+                  </label>
+                  <label class="select-field">
+                    <span>Show on</span>
+                    <select class="select-input" id="indicatorTargetType">
+                      <option value="key">One key</option>
+                      <option value="row">Activity row</option>
+                    </select>
+                  </label>
+                  <label class="select-field" id="indicatorKeyField">
+                    <span>Key</span>
+                    <select class="select-input" id="indicatorKey"></select>
+                  </label>
+                  <label class="select-field" id="indicatorRowField" hidden>
+                    <span>Row</span>
+                    <select class="select-input" id="indicatorRow">
+                      <option value="0">Number row</option>
+                      <option value="1">Q row</option>
+                      <option value="2">A row</option>
+                      <option value="3">Z row</option>
+                      <option value="4">Bottom row</option>
+                    </select>
+                  </label>
+                  <label class="color-field">
+                    <span>Color</span>
+                    <input type="color" id="indicatorColor" value="#7c5cff" />
+                  </label>
+                  <label class="field field--solo">
+                    <span>Priority <output id="indicatorPriorityOut">50</output></span>
+                    <input type="range" id="indicatorPriority" min="0" max="100" value="50" />
+                  </label>
+                </div>
+                <button type="button" class="btn btn--primary" id="btnSaveIndicator">Save indicator</button>
+              </div>
             </div>
           </section>
         </div>
