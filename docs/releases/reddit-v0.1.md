@@ -1,6 +1,6 @@
 # Reddit announcement
 
-Target: r/pwnage. Approved by the maintainer; publish after the V0.1 assets are live, subject to subreddit posting permissions.
+Target: r/pwnage. Prepared for manual submission: the maintainer will press Post. V0.1 and the download page are live.
 
 ## Title
 
