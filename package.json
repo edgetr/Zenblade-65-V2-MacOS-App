@@ -1,7 +1,7 @@
 {
   "name": "zenblade",
   "productName": "Zenblade",
-  "version": "1.4.1",
+  "version": "0.1.0",
   "description": "Mac app for the Pwnage Zenblade 65 V2 keyboard",
   "main": "electron/main.js",
   "author": "edgetr",
@@ -15,10 +15,13 @@
     "start": "npm run build:native && electron .",
     "dev": "npm run build:native && electron . --dev",
     "build:native": "bash scripts/build-native.sh",
-    "build": "npm run build:native && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
+    "build": "npm run build:native && npm run build:icons && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
     "install-app": "bash scripts/install.sh",
     "update": "bash scripts/install.sh",
-    "test": "node --experimental-default-type=module --test"
+    "test": "node --experimental-default-type=module --test",
+    "release:dmg": "bash scripts/release-dmg.sh",
+    "preview:release": "node scripts/preview-release.mjs",
+    "build:icons": "bash scripts/build-icons.sh"
   },
   "devDependencies": {
     "electron": "^43.1.0",
@@ -43,6 +46,10 @@
       {
         "from": "build/zenbridge",
         "to": "zenbridge"
+      },
+      {
+        "from": "build/Assets.car",
+        "to": "Assets.car"
       }
     ],
     "mac": {
@@ -51,7 +58,9 @@
       "target": [
         {
           "target": "dir",
-          "arch": ["arm64"]
+          "arch": [
+            "arm64"
+          ]
         }
       ],
       "identity": null,
@@ -60,8 +69,34 @@
       "extendInfo": {
         "CFBundleDisplayName": "Zenblade",
         "CFBundleName": "Zenblade",
-        "CFBundleIdentifier": "com.local.zenblade"
-      }
+        "CFBundleIdentifier": "com.local.zenblade",
+        "CFBundleIconName": "Zenblade"
+      },
+      "minimumSystemVersion": "12.0"
+    },
+    "dmg": {
+      "background": "build/dmg-background.png",
+      "icon": "build/icon.icns",
+      "iconSize": 88,
+      "iconTextSize": 13,
+      "title": "Zenblade ${version}",
+      "artifactName": "Zenblade-${version}-${arch}.${ext}",
+      "format": "UDZO",
+      "filesystem": "HFS+",
+      "writeUpdateInfo": false,
+      "contents": [
+        {
+          "x": 180,
+          "y": 239,
+          "type": "file"
+        },
+        {
+          "x": 460,
+          "y": 239,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     }
   }
 }

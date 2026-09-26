@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'; img-src 'self' data:;"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Zenblade</title>
@@ -44,7 +44,7 @@
                 <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke-linecap="round" />
               </svg>
             </span>
-            <span class="label">Lights</span>
+            <span class="label">Lighting</span>
           </button>
           <button class="nav__btn" data-panel="actuation">
             <span class="nav__icon" aria-hidden="true">
@@ -87,38 +87,35 @@
       </aside>
 
       <main class="main">
+        <div class="connect-top" aria-label="Keyboard connection">
+          <div class="btn-row">
+            <button class="btn btn--ghost" id="btnRefresh" disabled>Refresh</button>
+            <div class="device-discovery" id="deviceDiscovery" hidden>
+              <button class="btn btn--primary btn--sm" id="btnChooseKeyboard">Connect keyboard</button>
+            </div>
+          </div>
+          <dl class="stat-inline" id="deviceStats">
+            <div class="stat-inline__item device-name">
+              <dt class="sr-only">Device</dt>
+              <dd id="statName">—</dd>
+            </div>
+            <div class="stat-inline__item sr-only">
+              <dt>PID</dt>
+              <dd id="statPid">—</dd>
+            </div>
+            <div class="stat-inline__item">
+              <dt>Profile</dt>
+              <dd id="statProfile">—</dd>
+            </div>
+          </dl>
+        </div>
+
         <div class="main__scroll">
           <section class="panel is-active" id="panel-keyboard">
             <div class="panel__intro">
               <div>
-                <p class="panel__eyebrow">Keyboard</p>
-                <h2>Fine-tune individual keys</h2>
-                <p>Select a key, adjust its press and release points, then save it.</p>
+                <h2>Keyboard</h2>
               </div>
-              <span class="shortcut-hint" aria-label="Keyboard shortcut Command 1">⌘1</span>
-            </div>
-            <div class="connect-top">
-              <div class="btn-row">
-                <button class="btn btn--ghost" id="btnRefresh" disabled>Refresh</button>
-                <div class="device-discovery" id="deviceDiscovery" hidden>
-                  <span>Keyboard not detected</span>
-                  <button class="btn btn--primary btn--sm" id="btnChooseKeyboard">Choose keyboard</button>
-                </div>
-              </div>
-              <dl class="stat-inline" id="deviceStats">
-                <div class="stat-inline__item">
-                  <dt>Device</dt>
-                  <dd id="statName">—</dd>
-                </div>
-                <div class="stat-inline__item">
-                  <dt>PID</dt>
-                  <dd id="statPid">—</dd>
-                </div>
-                <div class="stat-inline__item">
-                  <dt>Profile</dt>
-                  <dd id="statProfile">—</dd>
-                </div>
-              </dl>
             </div>
 
             <div class="keyboard-layout">
@@ -128,11 +125,8 @@
                 </div>
               </div>
 
-              <div class="card key-editor" id="keyEditor">
-                <div class="key-editor__empty" id="keyEditorEmpty">
-                  <p class="card__title">Key Editor</p>
-                  <p class="key-editor__placeholder">Select a key on the board to edit it. Use the arrow keys to move around.</p>
-                </div>
+              <div class="card key-editor" id="keyEditor" hidden>
+                <div id="keyEditorEmpty" hidden></div>
                 <div class="key-editor__body" id="keyEditorBody" hidden>
                   <div class="card-toolbar">
                     <h3 class="card__title" id="keyEditorTitle">Key</h3>
@@ -140,13 +134,11 @@
                   </div>
                   <div class="field">
                     <label for="keyPress">Press <output id="keyOutPress">15</output></label>
-                    <button type="button" class="help-tip" data-help="How far down the key travels before it registers a press. Lower is faster and more sensitive." aria-label="Help: Press">?</button>
-                    <input type="range" id="keyPress" aria-label="Press point" min="1" max="40" value="15" />
+                    <input type="range" id="keyPress" title="Distance before this key registers a press." aria-description="Distance before this key registers a press." aria-label="Press point" min="1" max="40" value="15" />
                   </div>
                   <div class="field">
                     <label for="keyRelease">Release <output id="keyOutRelease">15</output></label>
-                    <button type="button" class="help-tip" data-help="How far up the key must travel before it unregisters. Used with Rapid Trigger for quick re-taps." aria-label="Help: Release">?</button>
-                    <input type="range" id="keyRelease" aria-label="Release point" min="1" max="40" value="15" />
+                    <input type="range" id="keyRelease" title="Return distance before this key releases." aria-description="Return distance before this key releases." aria-label="Release point" min="1" max="40" value="15" />
                   </div>
                   <div class="btn-row">
                     <button type="button" class="btn btn--primary" id="btnApplyKey">Save key</button>
@@ -159,18 +151,14 @@
           <section class="panel" id="panel-lighting">
             <div class="panel__intro">
               <div>
-                <p class="panel__eyebrow">Lights</p>
-                <h2>Set the mood</h2>
-                <p>Choose an effect, tune it, and apply when the preview feels right.</p>
+                <h2>Lighting</h2>
               </div>
-              <span class="shortcut-hint" aria-label="Keyboard shortcut Command 2">⌘2</span>
             </div>
             <div class="lighting-layout">
               <div class="card lighting-effect-card">
                 <div class="card-toolbar">
                   <h3 class="card__title">
                     Effect
-                    <button type="button" class="help-tip" data-help="Lighting pattern on the keyboard. Apply to send the effect to the board. The preview shows how patterns differ (for example Gradient V vs Gradient H)." aria-label="Help: Effect">?</button>
                   </h3>
                   <div class="lighting-effect-actions">
                     <label class="switch switch--compact">
@@ -189,12 +177,10 @@
                 <div class="lighting-tuning">
                   <div class="field" id="fieldBright">
                     <label for="lightBright">Brightness <output id="outBright">80</output></label>
-                    <button type="button" class="help-tip" data-help="Overall LED brightness on the keyboard." aria-label="Help: Brightness">?</button>
                     <input type="range" id="lightBright" aria-label="Brightness" min="0" max="100" value="80" />
                   </div>
                   <div class="field" id="fieldSpeed">
                     <label for="lightSpeed">Speed <output id="outSpeed">50</output></label>
-                    <button type="button" class="help-tip" data-help="How fast animated effects move." aria-label="Help: Speed">?</button>
                     <input type="range" id="lightSpeed" aria-label="Effect speed" min="0" max="100" value="50" />
                   </div>
                 </div>
@@ -216,12 +202,9 @@
           <section class="panel" id="panel-actuation">
             <div class="panel__intro">
               <div>
-                <p class="panel__eyebrow">Feel</p>
-                <h2>Choose how every key responds</h2>
-                <p>Start with a preset, then adjust only if you need to.</p>
+                <h2>Feel</h2>
               </div>
               <div class="panel__actions">
-                <span class="shortcut-hint" aria-label="Keyboard shortcut Command 3">⌘3</span>
                 <button class="btn btn--primary" id="btnApplyActuation">Apply</button>
               </div>
             </div>
@@ -229,22 +212,19 @@
               <div class="card">
                 <div class="field field--solo">
                   <label for="actPress">Press <output id="outPress">15</output></label>
-                  <button type="button" class="help-tip" data-help="Global press point for every key that does not have a per-key override on the Keyboard tab." aria-label="Help: Press">?</button>
-                  <input type="range" id="actPress" aria-label="Global press point" min="1" max="40" value="15" />
+                  <input type="range" id="actPress" title="Press point for keys without an override." aria-description="Press point for keys without an override." aria-label="Global press point" min="1" max="40" value="15" />
                 </div>
               </div>
               <div class="card">
                 <div class="field field--solo">
                   <label for="actRelease">Release <output id="outRelease">15</output></label>
-                  <button type="button" class="help-tip" data-help="Global release point for keys without a per-key override." aria-label="Help: Release">?</button>
-                  <input type="range" id="actRelease" aria-label="Global release point" min="1" max="40" value="15" />
+                  <input type="range" id="actRelease" title="Release point for keys without an override." aria-description="Release point for keys without an override." aria-label="Global release point" min="1" max="40" value="15" />
                 </div>
               </div>
               <div class="card card--center">
                 <label class="switch">
-                  <input type="checkbox" id="actRT" checked />
+                  <input type="checkbox" id="actRT" title="Retrigger keys when their direction changes." aria-description="Retrigger keys when their direction changes." checked />
                   <span>Rapid Trigger</span>
-                  <button type="button" class="help-tip" data-help="Allows keys to re-trigger as soon as they start moving up, instead of waiting for a full release. Great for fast taps in games." aria-label="Help: Rapid Trigger">?</button>
                 </label>
               </div>
             </div>
@@ -257,7 +237,6 @@
               <div class="card-toolbar">
                 <h3 class="card__title">
                   Typing Test
-                  <button type="button" class="help-tip" data-help="Type here to feel your current Press, Release, and Rapid Trigger before you Apply. This box does not change settings — it only lets you try them live." aria-label="Help: Typing Test">?</button>
                 </h3>
                 <button type="button" class="btn btn--ghost btn--sm" id="btnClearTypingTest">Clear</button>
               </div>
@@ -266,7 +245,7 @@
                 class="typing-test__area"
                 rows="5"
                 spellcheck="true"
-                placeholder="Type here to test your feel settings before applying…"
+                placeholder="" aria-label="Typing test"
               ></textarea>
             </div>
           </section>
@@ -276,10 +255,8 @@
               <div>
                 <h2>
                   Profiles
-                  <button type="button" class="help-tip" data-help="Each profile keeps its own lights, feel, and per-key edits." aria-label="Help: Profiles">?</button>
                 </h2>
               </div>
-              <span class="shortcut-hint" aria-label="Keyboard shortcut Command 4">⌘4</span>
             </div>
             <div class="card-toolbar profiles-toolbar">
               <div class="btn-row profile-actions">
@@ -304,7 +281,6 @@
               <div class="card-toolbar">
                 <h3 class="card__title">
                   Automatic profiles
-                  <button type="button" class="help-tip" data-help="A selected app activates its assigned profile. Fallback handles every app without a rule." aria-label="Help: Automatic profiles">?</button>
                 </h3>
                 <label class="switch switch--compact">
                   <input type="checkbox" id="automationEnabled" aria-label="Automatic profiles" />
@@ -334,149 +310,158 @@
                 </button>
               </div>
               <div class="automation-rules" id="automationRules"></div>
-              <p class="automation-empty" id="automationEmpty">No app rules</p>
+              <p class="automation-empty" id="automationEmpty"></p>
             </div>
           </section>
 
           <section class="panel" id="panel-advanced">
             <div class="panel__intro">
               <div>
-                <p class="panel__eyebrow">Onboard controls</p>
-                <h2>Make the keyboard yours</h2>
-                <p>Load the current hardware state before editing. Every save is read back and verified.</p>
+                <h2>Advanced</h2>
               </div>
               <div class="panel__actions">
-                <span class="shortcut-hint" aria-label="Keyboard shortcut Command 5">⌘5</span>
                 <button type="button" class="btn btn--primary" id="btnLoadAdvanced">Load keyboard</button>
               </div>
             </div>
 
-            <p class="advanced-status" id="advancedStatus" aria-live="polite">Connect the keyboard to load onboard controls</p>
+            <p class="advanced-status" id="advancedStatus" aria-live="polite"></p>
 
             <div class="advanced-grid">
-              <article class="card advanced-card polling-card">
-                <div>
-                  <p class="panel__eyebrow">USB performance</p>
-                  <h3 class="card__title">Polling rate</h3>
-                  <p>The V2 advertises a fixed high-speed report interval. There is no firmware setter to fake here.</p>
-                </div>
-                <div class="polling-readout">
-                  <strong id="pollingValue">—</strong>
-                  <span id="pollingInterval">Connect the keyboard to verify</span>
-                </div>
-              </article>
-
               <article class="card advanced-card">
-                <div class="card-toolbar">
-                  <div>
-                    <p class="panel__eyebrow">Six layers</p>
+                <details class="disclose" open>
+                  <summary class="disclose__summary">
                     <h3 class="card__title">Key remapping</h3>
+                  </summary>
+                  <div class="disclose__body">
+                    <div class="card-toolbar">
+                      <button type="button" class="btn btn--primary btn--sm" id="btnSaveRemap">Save mapping</button>
+                    </div>
+                    <div class="advanced-fields">
+                      <label class="select-field">
+                        <span>Layer</span>
+                        <select class="select-input" id="remapLayer"></select>
+                      </label>
+                      <label class="select-field">
+                        <span>Physical key</span>
+                        <select class="select-input" id="remapKey"></select>
+                      </label>
+                      <label class="select-field advanced-field--wide">
+                        <span>Assignment</span>
+                        <select class="select-input" id="remapAssignment"></select>
+                      </label>
+                    </div>
+                    <p class="advanced-note" id="remapCurrent"></p>
+                    <p class="advanced-note is-warning" id="remapEscNote" hidden>Escape is protected by the keyboard firmware and cannot be remapped.</p>
                   </div>
-                  <button type="button" class="btn btn--primary btn--sm" id="btnSaveRemap">Save mapping</button>
-                </div>
-                <div class="advanced-fields">
-                  <label class="select-field">
-                    <span>Layer</span>
-                    <select class="select-input" id="remapLayer"></select>
-                  </label>
-                  <label class="select-field">
-                    <span>Physical key</span>
-                    <select class="select-input" id="remapKey"></select>
-                  </label>
-                  <label class="select-field advanced-field--wide">
-                    <span>Assignment</span>
-                    <select class="select-input" id="remapAssignment"></select>
-                  </label>
-                </div>
-                <p class="advanced-note" id="remapCurrent">Load the keyboard to edit mappings.</p>
-                <p class="advanced-note is-warning" id="remapEscNote" hidden>Escape is protected by the keyboard firmware and cannot be remapped.</p>
+                </details>
+              </article>
+
+              <article class="card advanced-card polling-card">
+                <details class="disclose">
+                  <summary class="disclose__summary">
+                    <h3 class="card__title">Polling rate</h3>
+                  </summary>
+                  <div class="disclose__body">
+                    <p>Fixed high-speed interval. Firmware has no rate setter.</p>
+                    <div class="polling-readout">
+                      <strong id="pollingValue">—</strong>
+                      <span id="pollingInterval">Connect the keyboard to verify</span>
+                    </div>
+                  </div>
+                </details>
               </article>
 
               <article class="card advanced-card">
-                <div class="card-toolbar">
-                  <div>
-                    <p class="panel__eyebrow">Per profile</p>
+                <details class="disclose">
+                  <summary class="disclose__summary">
                     <h3 class="card__title">SOCD pairs</h3>
+                  </summary>
+                  <div class="disclose__body">
+                    <div class="card-toolbar">
+                      <button type="button" class="btn btn--primary btn--sm" id="btnSaveSocd">Save SOCD</button>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="socdEnabled" />
+                      <span>Enable SOCD for this profile</span>
+                    </label>
+                    <div class="advanced-fields">
+                      <label class="select-field">
+                        <span>Pair</span>
+                        <select class="select-input" id="socdSlot"></select>
+                      </label>
+                      <label class="select-field">
+                        <span>Rule</span>
+                        <select class="select-input" id="socdMode">
+                          <option value="0">No rule (unused)</option>
+                          <option value="1">Last input wins</option>
+                          <option value="2">Neutral</option>
+                          <option value="3">Key 1 wins</option>
+                          <option value="4">Key 2 wins</option>
+                        </select>
+                      </label>
+                      <label class="select-field">
+                        <span>Key 1</span>
+                        <select class="select-input" id="socdKey1"></select>
+                      </label>
+                      <label class="select-field">
+                        <span>Key 2</span>
+                        <select class="select-input" id="socdKey2"></select>
+                      </label>
+                    </div>
+                    <label class="switch switch--compact">
+                      <input type="checkbox" id="socdBottomOut" />
+                      <span>Alternative behavior when both keys bottom out</span>
+                    </label>
                   </div>
-                  <button type="button" class="btn btn--primary btn--sm" id="btnSaveSocd">Save SOCD</button>
-                </div>
-                <label class="switch">
-                  <input type="checkbox" id="socdEnabled" />
-                  <span>Enable SOCD for this profile</span>
-                </label>
-                <div class="advanced-fields">
-                  <label class="select-field">
-                    <span>Pair</span>
-                    <select class="select-input" id="socdSlot"></select>
-                  </label>
-                  <label class="select-field">
-                    <span>Rule</span>
-                    <select class="select-input" id="socdMode">
-                      <option value="0">No rule (unused)</option>
-                      <option value="1">Last input wins</option>
-                      <option value="2">Neutral</option>
-                      <option value="3">Key 1 wins</option>
-                      <option value="4">Key 2 wins</option>
-                    </select>
-                  </label>
-                  <label class="select-field">
-                    <span>Key 1</span>
-                    <select class="select-input" id="socdKey1"></select>
-                  </label>
-                  <label class="select-field">
-                    <span>Key 2</span>
-                    <select class="select-input" id="socdKey2"></select>
-                  </label>
-                </div>
-                <label class="switch switch--compact">
-                  <input type="checkbox" id="socdBottomOut" />
-                  <span>Alternative behavior when both keys bottom out</span>
-                </label>
+                </details>
               </article>
 
               <article class="card advanced-card macro-card">
-                <div class="card-toolbar">
-                  <div>
-                    <p class="panel__eyebrow">16 onboard slots</p>
+                <details class="disclose">
+                  <summary class="disclose__summary">
                     <h3 class="card__title">Macros</h3>
+                  </summary>
+                  <div class="disclose__body">
+                    <div class="card-toolbar">
+                      <div class="btn-row">
+                        <button type="button" class="btn btn--ghost btn--sm" id="btnLoadMacros">Load macros</button>
+                        <button type="button" class="btn btn--primary btn--sm" id="btnSaveMacro">Save macros</button>
+                      </div>
+                    </div>
+                    <div class="macro-toolbar">
+                      <label class="select-field">
+                        <span>Slot</span>
+                        <select class="select-input" id="macroSlot"></select>
+                      </label>
+                      <button type="button" class="btn" id="btnRecordMacro">Record</button>
+                      <button type="button" class="btn btn--ghost" id="btnClearMacro">Clear</button>
+                      <span class="advanced-note" id="macroStorage">Not loaded</span>
+                    </div>
+                    <button type="button" class="macro-capture" id="macroCapture" hidden>
+                      Recording — press keys, then Escape to stop
+                    </button>
+                    <div class="macro-add-row">
+                      <label class="select-field">
+                        <span>Delay</span>
+                        <select class="select-input" id="macroDelay">
+                          <option value="50">50 ms</option>
+                          <option value="100">100 ms</option>
+                          <option value="250">250 ms</option>
+                          <option value="500">500 ms</option>
+                          <option value="1000">1 second</option>
+                        </select>
+                      </label>
+                      <button type="button" class="btn btn--ghost" id="btnAddMacroDelay">Add delay</button>
+                      <label class="text-field macro-text-field">
+                        <span>Text</span>
+                        <input type="text" id="macroText" maxlength="200" placeholder="ASCII text" />
+                      </label>
+                      <button type="button" class="btn btn--ghost" id="btnAddMacroText">Add text</button>
+                    </div>
+                    <ol class="macro-actions" id="macroActions"></ol>
+                    <p class="advanced-note" id="macroEmpty">Load a macro slot, then record keys or add an action.</p>
                   </div>
-                  <div class="btn-row">
-                    <button type="button" class="btn btn--ghost btn--sm" id="btnLoadMacros">Load macros</button>
-                    <button type="button" class="btn btn--primary btn--sm" id="btnSaveMacro">Save macros</button>
-                  </div>
-                </div>
-                <div class="macro-toolbar">
-                  <label class="select-field">
-                    <span>Slot</span>
-                    <select class="select-input" id="macroSlot"></select>
-                  </label>
-                  <button type="button" class="btn" id="btnRecordMacro">Record</button>
-                  <button type="button" class="btn btn--ghost" id="btnClearMacro">Clear</button>
-                  <span class="advanced-note" id="macroStorage">Not loaded</span>
-                </div>
-                <button type="button" class="macro-capture" id="macroCapture" hidden>
-                  Recording — press keys, then Escape to stop
-                </button>
-                <div class="macro-add-row">
-                  <label class="select-field">
-                    <span>Delay</span>
-                    <select class="select-input" id="macroDelay">
-                      <option value="50">50 ms</option>
-                      <option value="100">100 ms</option>
-                      <option value="250">250 ms</option>
-                      <option value="500">500 ms</option>
-                      <option value="1000">1 second</option>
-                    </select>
-                  </label>
-                  <button type="button" class="btn btn--ghost" id="btnAddMacroDelay">Add delay</button>
-                  <label class="text-field macro-text-field">
-                    <span>Text</span>
-                    <input type="text" id="macroText" maxlength="200" placeholder="ASCII text" />
-                  </label>
-                  <button type="button" class="btn btn--ghost" id="btnAddMacroText">Add text</button>
-                </div>
-                <ol class="macro-actions" id="macroActions"></ol>
-                <p class="advanced-note" id="macroEmpty">Load a macro slot, then record keys or add an action.</p>
+                </details>
               </article>
             </div>
           </section>
@@ -484,24 +469,14 @@
           <section class="panel" id="panel-system">
             <div class="panel__intro">
               <div>
-                <p class="panel__eyebrow">Desktop link</p>
-                <h2>Let the keyboard understand your Mac</h2>
-                <p>Give spare keys useful controls, set a meeting route, and build a status map without changing how the rest of your keyboard behaves.</p>
+                <h2>System</h2>
               </div>
-              <span class="shortcut-hint" aria-label="Keyboard shortcut Command 6">⌘6</span>
-            </div>
-
-            <div class="system-livebar" id="systemLivebar">
-              <span class="system-livebar__dot" aria-hidden="true"></span>
-              <strong id="systemLiveTitle">Profile 1 system controls are paused</strong>
-              <span id="systemLiveDetail">Settings stay saved until you enable them.</span>
             </div>
 
             <div class="system-grid">
               <article class="card system-card system-card--actions">
                 <div class="card-toolbar">
                   <div>
-                    <p class="panel__eyebrow">Per profile</p>
                     <h3 class="card__title">Key controls</h3>
                   </div>
                   <label class="switch switch--compact">
@@ -509,13 +484,12 @@
                     <span>Enabled</span>
                   </label>
                 </div>
-                <p class="system-card__copy">Replace a spare key, or keep its normal behavior and use it with modifiers. Each key gets one unambiguous binding per profile.</p>
                 <div class="system-quick">
                   <button type="button" class="btn btn--primary btn--sm" id="btnMediaPair">Use Page keys for tracks</button>
                   <button type="button" class="btn btn--ghost btn--sm" id="btnAddSystemAction">Add control</button>
                 </div>
                 <div class="system-list" id="systemActionList"></div>
-                <p class="system-empty" id="systemActionEmpty">No desktop controls on this profile.</p>
+                <p class="system-empty" id="systemActionEmpty"></p>
                 <div class="system-footer">
                   <span id="systemMappingStatus">Connect the keyboard to sync controls.</span>
                   <button type="button" class="btn btn--primary btn--sm" id="btnSyncSystemMappings">Sync controls</button>
@@ -523,55 +497,57 @@
               </article>
 
               <article class="card system-card system-card--audio">
-                <div class="card-toolbar">
-                  <div>
-                    <p class="panel__eyebrow">Audio scene</p>
+                <details class="disclose">
+                  <summary class="disclose__summary">
                     <h3 class="card__title">Meeting setup</h3>
+                  </summary>
+                  <div class="disclose__body">
+                    <span class="mic-pill" id="systemMicState">Checking mic…</span>
+                    <div class="system-audio-fields">
+                      <label class="select-field">
+                        <span>Microphone</span>
+                        <select class="select-input" id="systemInputDevice"></select>
+                      </label>
+                      <label class="select-field">
+                        <span>Output</span>
+                        <select class="select-input" id="systemOutputDevice"></select>
+                      </label>
+                    </div>
                   </div>
-                  <span class="mic-pill" id="systemMicState">Checking mic…</span>
-                </div>
-                <p class="system-card__copy">Choose the devices used when a keyboard binding invokes Meeting setup, Select microphone, or Select audio output. Nothing runs from this panel.</p>
-                <div class="system-audio-fields">
-                  <label class="select-field">
-                    <span>Microphone</span>
-                    <select class="select-input" id="systemInputDevice"></select>
-                  </label>
-                  <label class="select-field">
-                    <span>Output</span>
-                    <select class="select-input" id="systemOutputDevice"></select>
-                  </label>
-                </div>
-                <p class="system-config-note">Map an action above to control audio from the keyboard.</p>
+                </details>
               </article>
 
               <article class="card system-card system-card--indicators">
-                <div class="card-toolbar">
-                  <div>
-                    <p class="panel__eyebrow">Context layer</p>
+                <details class="disclose">
+                  <summary class="disclose__summary">
                     <h3 class="card__title">Status map</h3>
+                  </summary>
+                  <div class="disclose__body">
+                    <div class="card-toolbar">
+                      <label class="switch switch--compact">
+                        <input type="checkbox" id="indicatorEnabled" />
+                        <span>Preview</span>
+                      </label>
+                    </div>
+                    <div class="system-capability">
+                      <strong>Preview only</strong>
+                      <span>Status colors appear here only. The firmware supports whole-board RGB, not per-key status lighting.</span>
+                    </div>
+                    <div class="system-presets" aria-label="Quick indicator presets">
+                      <button type="button" class="status-preset" data-indicator-preset="mic">Muted mic</button>
+                      <button type="button" class="status-preset" data-indicator-preset="codex">Codex</button>
+                      <button type="button" class="status-preset" data-indicator-preset="claude">Claude Code</button>
+                      <button type="button" class="status-preset" data-indicator-preset="grok">Grok</button>
+                      <button type="button" class="status-preset" data-indicator-preset="activity">Agent activity row</button>
+                      <button type="button" class="status-preset" id="btnAddIndicator">Custom</button>
+                    </div>
+                    <div class="board-wrap system-board-wrap">
+                      <div class="board system-board" id="indicatorBoard" aria-label="Live status map"></div>
+                    </div>
+                    <div class="system-list system-list--rules" id="indicatorRuleList"></div>
+                    <p class="system-empty" id="indicatorEmpty"></p>
                   </div>
-                  <label class="switch switch--compact">
-                    <input type="checkbox" id="indicatorEnabled" />
-                    <span>Preview</span>
-                  </label>
-                </div>
-                <div class="system-capability">
-                  <strong>Prepared for per-key output</strong>
-                  <span>The current Zenblade firmware exposes only whole-board RGB. Status colors stay in this live map instead of overwriting your lighting effect.</span>
-                </div>
-                <div class="system-presets" aria-label="Quick indicator presets">
-                  <button type="button" class="status-preset" data-indicator-preset="mic">Muted mic</button>
-                  <button type="button" class="status-preset" data-indicator-preset="codex">Codex</button>
-                  <button type="button" class="status-preset" data-indicator-preset="claude">Claude Code</button>
-                  <button type="button" class="status-preset" data-indicator-preset="grok">Grok</button>
-                  <button type="button" class="status-preset" data-indicator-preset="activity">Agent activity row</button>
-                  <button type="button" class="status-preset" id="btnAddIndicator">Custom</button>
-                </div>
-                <div class="board-wrap system-board-wrap">
-                  <div class="board system-board" id="indicatorBoard" aria-label="Live status map"></div>
-                </div>
-                <div class="system-list system-list--rules" id="indicatorRuleList"></div>
-                <p class="system-empty" id="indicatorEmpty">Add an indicator to make this map context aware.</p>
+                </details>
               </article>
             </div>
 

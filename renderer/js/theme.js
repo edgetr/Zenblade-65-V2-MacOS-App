@@ -1,13 +1,14 @@
 import { hsvToRgb, rgbToCss, rgbToHsv } from "./color.js";
 export function uiAccentFromLighting(lighting) {
-  // Physical LEDs may be intentionally dim/desaturated; chrome must remain readable.
+  // Keep the interface accent soft and readable independently of LED intensity.
+  // The keyboard preview continues to use the exact wire colors.
   if (!lighting?.isOn || lighting.brightness < 22 || lighting.saturation < 25) {
     return { r: 184, g: 245, b: 200 };
   }
   return hsvToRgb(
     lighting.hue || 0,
-    Math.max(45, lighting.saturation),
-    Math.max(54, lighting.brightness),
+    Math.min(30, lighting.saturation),
+    94,
   );
 }
 export function applyTheme(lighting) {

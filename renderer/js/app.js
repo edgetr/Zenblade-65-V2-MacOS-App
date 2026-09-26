@@ -50,6 +50,8 @@ function syncChrome() {
   const hasKeySelected = !!state.selectedKey;
 
   $("btnRefresh").disabled = deviceBusy;
+  $("btnRefresh").hidden = !connected;
+  document.querySelector(".connect-top").toggleAttribute("data-connected", connected);
   $("btnApplyLighting").disabled = deviceBusy || !lightingDirty;
   $("btnApplyActuation").disabled = deviceBusy;
   $("btnApplyKey").disabled = running || !hasKeySelected;

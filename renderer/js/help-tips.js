@@ -41,7 +41,7 @@ export function initHelpTips() {
   }, true);
   document.addEventListener("pointerout", (event) => {
     const button = event.target.closest?.(".help-tip");
-    if (button === current && !button.contains(event.relatedTarget)) hide();
+    if (button && button === current && !button.contains(event.relatedTarget)) hide();
   }, true);
   document.addEventListener("focusin", (event) => {
     const button = event.target.closest?.(".help-tip");

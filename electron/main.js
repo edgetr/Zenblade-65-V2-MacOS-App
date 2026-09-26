@@ -2,7 +2,6 @@ const {
   app,
   BrowserWindow,
   ipcMain,
-  shell,
   session,
   Menu,
   nativeTheme,
@@ -20,12 +19,8 @@ const {
   readApplicationMetadata,
 } = require("./desktop.js");
 const { createSystemBridge } = require("./system-bridge.js");
-const {
-  vendorId: PWNAGE_VID,
-  productIds: ZENBLADE_PID_LIST,
-} = require("../shared/device-ids.json");
+const { createRendererSecurity } = require("./security.js");
 
-const ZENBLADE_PIDS = new Set(ZENBLADE_PID_LIST);
 const APP_BUNDLE_ID = "com.local.zenblade";
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -66,6 +61,9 @@ function resolveTrayIcon() {
 }
 
 let mainWindow = null;
+const rendererPath = path.join(__dirname, "..", "renderer", "index.html");
+const security = createRendererSecurity(rendererPath, () => mainWindow?.webContents);
+const handleTrusted = (channel, handler) => security.handle(ipcMain, channel, handler);
 let tray = null;
 let foregroundTimer = null;
 let foregroundBusy = false;
@@ -202,21 +200,6 @@ function stopForegroundMonitor() {
   activeApplication = null;
 }
 
-function configureHid(ses) {
-  ses.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(permission === "hid");
-  });
-  ses.setDevicePermissionHandler((details) => details.deviceType === "hid");
-  ses.on("select-hid-device", (event, details, callback) => {
-    event.preventDefault();
-    const list = details.deviceList || [];
-    const zen = list.find(
-      (d) => d.vendorId === PWNAGE_VID && ZENBLADE_PIDS.has(d.productId),
-    );
-    callback(zen ? zen.deviceId : "");
-  });
-}
-
 function createWindow() {
   const icon = resolveAppIcon();
 
@@ -235,7 +218,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       spellcheck: false,
       // The hidden menu-bar utility still needs to handle active-app and
       // reconnect events promptly.
@@ -246,7 +229,7 @@ function createWindow() {
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
-    if (process.platform === "darwin" && icon && app.dock) {
+    if (process.platform === "darwin" && !app.isPackaged && icon && app.dock) {
       app.dock.setIcon(icon);
     }
   });
@@ -262,12 +245,8 @@ function createWindow() {
     mainWindow = null;
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: "deny" };
-  });
-
-  mainWindow.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
+  security.protectWindow(mainWindow.webContents);
+  mainWindow.loadFile(rendererPath);
 
   if (isDev) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
@@ -385,11 +364,12 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
     }
   }
 
+  // Packaged apps use the native layered icon catalog and its system appearances.
   const icon = resolveAppIcon();
-  if (process.platform === "darwin" && icon && app.dock) {
+  if (process.platform === "darwin" && !app.isPackaged && icon && app.dock) {
     app.dock.setIcon(icon);
   }
-  configureHid(session.defaultSession);
+  security.configureSession(session.defaultSession);
   systemBridge = createSystemBridge({
     packaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -398,17 +378,18 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
   createWindow();
   createTray();
 
-  ipcMain.handle("app:getInfo", () => ({
+  handleTrusted("app:getInfo", () => ({
     version: app.getVersion(),
     platform: process.platform,
     name: app.getName(),
   }));
-  ipcMain.handle("app:getActiveApplication", async () => {
+  handleTrusted("app:getActiveApplication", async () => {
     const current = await getFrontApplication();
     if (current?.bundleId !== APP_BUNDLE_ID) activeApplication = current;
     return activeApplication;
   });
-  ipcMain.on("app:setDesktopState", (_event, next) => {
+  ipcMain.on("app:setDesktopState", (event, next) => {
+    if (!security.trustedSender(event)) return;
     const automationWasEnabled = desktopState.automationEnabled;
     Object.assign(desktopState, {
       connected: next?.connected === true,
@@ -423,10 +404,10 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
     }
     buildTrayMenu();
   });
-  ipcMain.handle("app:getSystemContext", async (_event, detectors) => {
+  handleTrusted("app:getSystemContext", async (_event, detectors) => {
     return systemBridge.getContext(detectors);
   });
-  ipcMain.handle("app:configureSystemShortcuts", (_event, mappings) => {
+  handleTrusted("app:configureSystemShortcuts", (_event, mappings) => {
     for (const accelerator of registeredSystemShortcuts) {
       globalShortcut.unregister(accelerator);
     }
@@ -455,7 +436,7 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
       failures,
     };
   });
-  ipcMain.handle("app:chooseApplications", async () => {
+  handleTrusted("app:chooseApplications", async () => {
     const result = await dialog.showOpenDialog(dialogParent(), {
       title: "Choose applications",
       defaultPath: "/Applications",
@@ -474,7 +455,7 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
       return true;
     });
   });
-  ipcMain.handle("app:exportProfile", async (_event, payload) => {
+  handleTrusted("app:exportProfile", async (_event, payload) => {
     const profile = Math.max(0, Math.min(2, Number(payload?.profile) | 0));
     const data = assertSupportedProfileFile(payload?.data);
     const result = await dialog.showSaveDialog(dialogParent(), {
@@ -491,7 +472,7 @@ if (hasSingleInstanceLock) app.whenReady().then(() => {
     );
     return { canceled: false };
   });
-  ipcMain.handle("app:importProfile", async (_event, targetProfile) => {
+  handleTrusted("app:importProfile", async (_event, targetProfile) => {
     const profile = Math.max(0, Math.min(2, Number(targetProfile) | 0));
     const result = await dialog.showOpenDialog(dialogParent(), {
       title: "Import Zenblade Profile",

@@ -5,13 +5,10 @@
   padding: clamp(12px, 1.6vw, 20px);
   border-radius: calc(var(--radius) + 6px);
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.04), transparent 40%),
-    linear-gradient(160deg, #2e283c 0%, #1a1626 48%, #100e18 100%);
+    linear-gradient(160deg, #2a2436 0%, #1a1626 52%, #121018 100%);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -20px 40px rgba(0, 0, 0, 0.25),
-    0 28px 56px rgba(0, 0, 0, 0.45);
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   container-type: inline-size;
 }
 

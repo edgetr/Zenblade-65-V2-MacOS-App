@@ -105,7 +105,7 @@ export function normalizeStore(raw, validCodes = {}) {
     p.actuation = normalizeActuation(a, defaultActuation());
     p.system = normalizeSystemProfile(src.system);
     for (const [code, ov] of Object.entries(src.keyOverrides || {})) {
-      if (validCodes[code] != null && ov && typeof ov === "object") {
+      if (Object.hasOwn(validCodes, code) && ov && typeof ov === "object") {
         p.keyOverrides[code] = {
           press: clamp(number(ov.press, 15), 1, 40),
           release: clamp(number(ov.release, 15), 1, 40),
@@ -119,7 +119,7 @@ export function normalizeStore(raw, validCodes = {}) {
       }
     }
     for (const [code, note] of Object.entries(src.appNotes || {})) {
-      if (validCodes[code] != null && note) {
+      if (Object.hasOwn(validCodes, code) && note) {
         p.appNotes[code] = {
           macro: String(note.macro || ""),
           combo: String(note.combo || ""),

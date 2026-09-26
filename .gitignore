@@ -10,10 +10,12 @@ out/
 .grok/
 AGENTS.md
 
-# local icon experiments (keep only icon.png + icon.icns)
+# Generated icon catalog and local previews
 build/*preview*
 build/icon-preview.png
 build/final-dock-check.png
 build/installed-dock-preview.png
 build/dock-*
 build/zenbridge
+
+build/Assets.car

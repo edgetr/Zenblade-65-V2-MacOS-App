@@ -81,13 +81,13 @@ export function createSystemUi({
     if (mappingStatus) {
       node.textContent = mappingStatus;
     } else if (!state.connected) {
-      node.textContent = "Connect the keyboard to sync controls.";
+      node.textContent = "";
     } else if (shortcutFailures.length) {
       node.textContent = `macOS reserved ${shortcutFailures.join(", ")}. Choose another control.`;
     } else if (!state.system.enabled) {
-      node.textContent = "Paused · factory keys stay intact and shortcuts are inactive.";
+      node.textContent = "";
     } else {
-      node.textContent = "Ready to sync replacement keys and activate shortcuts.";
+      node.textContent = "";
     }
   }
 
@@ -328,18 +328,6 @@ export function createSystemUi({
     $("btnSyncSystemMappings").disabled = !state.connected || gate.running;
     $("btnAddSystemAction").disabled = state.system.keyActions.length >=
       CONTROL_KEYS.length;
-    const livebar = $("systemLivebar");
-    livebar.classList.toggle("is-live", state.system.enabled);
-    $("systemLiveTitle").textContent = state.system.enabled
-      ? `Profile ${state.profile + 1} system controls are live`
-      : `Profile ${state.profile + 1} system controls are paused`;
-    $("systemLiveDetail").textContent = state.system.enabled
-      ? `${state.system.keyActions.length} keyboard binding${
-        state.system.keyActions.length === 1 ? "" : "s"
-      } · ${state.system.indicators.rules.length} status rule${
-        state.system.indicators.rules.length === 1 ? "" : "s"
-      }`
-      : "Settings stay saved until you enable them.";
     fillDeviceSelect("systemInputDevice", "input", state.system.audio.inputUid);
     fillDeviceSelect("systemOutputDevice", "output", state.system.audio.outputUid);
     renderActions();

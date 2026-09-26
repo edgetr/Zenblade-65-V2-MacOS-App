@@ -6,6 +6,7 @@ output="$repo_dir/build/zenbridge"
 
 xcrun clang \
   -arch arm64 \
+  -mmacosx-version-min=12.0 \
   -fobjc-arc \
   -Os \
   -framework AppKit \

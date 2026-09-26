@@ -16,7 +16,7 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 
 echo "Building ${APP_NAME}..."
 npm install --silent
-npx electron-builder --mac dir --arm64
+npm run build
 
 if [[ ! -d "$SRC_APP" ]]; then
   echo "Build failed: missing $SRC_APP" >&2

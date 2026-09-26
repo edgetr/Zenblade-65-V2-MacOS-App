@@ -76,7 +76,7 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     $("remapAssignment").disabled = !loaded || key === 0;
     $("btnSaveRemap").disabled = !state.connected || gate.running ||
       !loaded || key === 0;
-    $("remapEscNote").hidden = key !== 0;
+    $("remapEscNote").hidden = !loaded || key !== 0;
     if (current != null) {
       if (![...$("remapAssignment").options].some((item) =>
         Number(item.value) === current
@@ -86,7 +86,7 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
       $("remapAssignment").value = String(current);
     }
     $("remapCurrent").textContent = current == null
-      ? "Load the keyboard to edit mappings."
+      ? ""
       : systemManaged
       ? `Onboard: ${describeHid(current)} · managed by System on this profile`
       : `Onboard: ${describeHid(current)}`;
@@ -215,6 +215,10 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
 
   function recordKey(event) {
     if (!recording || event.repeat) return;
+    if (!$("macroCapture").checkVisibility()) {
+      stopRecording();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (event.code === "Escape") {
@@ -328,6 +332,10 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
       .finally(sync);
   });
   document.addEventListener("keydown", recordKey, true);
+  const macroSection = $("macroCapture").closest("details");
+  macroSection?.addEventListener("toggle", () => {
+    if (!macroSection.open && recording) stopRecording();
+  });
 
   function connectionChanged() {
     if (!state.connected) {
@@ -336,7 +344,7 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
       socdProfile = null;
       macros = null;
       recording = false;
-      setStatus("Connect the keyboard to load onboard controls");
+      setStatus("");
     }
     sync();
     onChromeChange?.();

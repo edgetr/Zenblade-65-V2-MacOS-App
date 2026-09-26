@@ -67,7 +67,7 @@ export function createProfilesUi({
   }
 
   function sync() {
-    $("statProfile").textContent = connected() ? `P${state.profile + 1}` : "—";
+    $("statProfile").textContent = `P${state.profile + 1}`;
     document.querySelectorAll(".profile-card").forEach((el) => {
       const active = +el.dataset.profile === state.profile;
       el.classList.toggle("is-active", active);

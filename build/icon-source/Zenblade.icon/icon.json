@@ -1,0 +1,48 @@
+{
+  "features": [
+    "refractivity"
+  ],
+  "fill": {
+    "solid": "extended-srgb:0.72549,0.85490,0.80784,1.00000"
+  },
+  "groups": [
+    {
+      "blur-material": 0.25,
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "z-legend.svg",
+          "name": "z-legend"
+        },
+        {
+          "image-name": "keycap-face.svg",
+          "name": "keycap-face"
+        },
+        {
+          "image-name": "keycap-base.svg",
+          "name": "keycap-base"
+        }
+      ],
+      "refractivity": {
+        "depth": 0.12,
+        "enabled": true,
+        "strength": 0.35
+      },
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.6
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.55
+      },
+      "name": "Keycap"
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

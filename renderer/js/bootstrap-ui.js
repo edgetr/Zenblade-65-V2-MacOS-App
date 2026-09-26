@@ -23,6 +23,11 @@ export function installBootstrapUi({
   const setDiscoveryVisible = (visible) => {
     $("deviceDiscovery").hidden = !visible;
   };
+  document.querySelectorAll("details").forEach((section) => {
+    section.addEventListener("toggle", () => {
+      if (section.open) board.scheduleScale();
+    });
+  });
   const setActivePanel = (panel) => {
     document.querySelectorAll(".nav__btn").forEach((item) => {
       const active = item.dataset.panel === panel;

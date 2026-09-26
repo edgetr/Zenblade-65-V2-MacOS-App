@@ -12,6 +12,7 @@ export function createKeyEditor({ model, paint, onApply, toast, connected }) {
   };
 
   function open(code) {
+    $("keyEditor").hidden = false;
     state.selectedKey = code;
     $("keyEditorEmpty").hidden = true;
     $("keyEditorBody").hidden = false;
@@ -30,6 +31,7 @@ export function createKeyEditor({ model, paint, onApply, toast, connected }) {
   }
 
   function clear() {
+    $("keyEditor").hidden = true;
     state.selectedKey = null;
     $("keyEditorEmpty").hidden = false;
     $("keyEditorBody").hidden = true;

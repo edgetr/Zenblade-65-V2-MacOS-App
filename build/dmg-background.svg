@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="440" viewBox="0 0 640 440">
+  <defs>
+    <linearGradient id="paper" x2="0.9" y2="1"><stop stop-color="#fcfaf7"/><stop offset="1" stop-color="#f2edf7"/></linearGradient>
+    <linearGradient id="mint" x2="1" y2="1"><stop stop-color="#e1f3e9"/><stop offset="1" stop-color="#eef6ed"/></linearGradient>
+    <linearGradient id="lilac" x2="1" y2="1"><stop stop-color="#ede6fa"/><stop offset="1" stop-color="#f4eefa"/></linearGradient>
+  </defs>
+  <rect width="640" height="440" fill="url(#paper)"/>
+  <circle cx="5" cy="35" r="135" fill="#e7f2e9" opacity=".65"/>
+  <circle cx="632" cy="425" r="148" fill="#e6dff2" opacity=".6"/>
+  <g fill="none" stroke="#aaa0bc" stroke-width="1.8" stroke-linecap="round">
+    <path d="M100 87v12m-6-6h12M540 117v14m-7-7h14"/>
+    <path d="M561 331v8m-4-4h8M78 331v8m-4-4h8" opacity=".65"/>
+  </g>
+  <g fill="#b6ccb9"><circle cx="143" cy="120" r="2.5"/><circle cx="517" cy="75" r="3"/></g>
+  <text x="320" y="119" text-anchor="middle" fill="#342d42" font-family="Helvetica Neue,Helvetica,sans-serif" font-size="33" font-weight="600" letter-spacing="-1">Zenblade</text>
+  <rect x="102" y="173" width="156" height="150" rx="30" fill="url(#mint)" stroke="#d4e4d9"/>
+  <rect x="382" y="173" width="156" height="150" rx="30" fill="url(#lilac)" stroke="#dfd5ed"/>
+  <g stroke="#9685ae" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M282 239c22-12 50-12 72 0"/>
+    <path d="m346 229 10 11-14 4"/>
+  </g>
+  <text x="320" y="371" text-anchor="middle" fill="#42384e" font-family="Helvetica Neue,Helvetica,sans-serif" font-size="19" font-weight="500">Drag to Applications</text>
+</svg>
