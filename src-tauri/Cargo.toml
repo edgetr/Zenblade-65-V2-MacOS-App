@@ -1,0 +1,53 @@
+[package]
+name = "zenblade"
+version = "0.2.0"
+description = "Mac app for the Pwnage Zenblade 65 V2 keyboard"
+authors = ["edgetr"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.80"
+
+[lib]
+name = "zenblade_lib"
+crate-type = ["staticlib", "rlib"]
+
+[[bin]]
+name = "zenblade"
+path = "src/main.rs"
+
+[features]
+# Test harness only; never enabled for release bundles.
+e2e = []
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "devtools", "macos-private-api"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time"] }
+hidapi = "2"
+plist = "1"
+rusty-leveldb = "3"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSNotification", "NSString", "NSOperation", "NSDistributedNotificationCenter", "NSProcessInfo"] }
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+block2 = "0.6"
+core-foundation = "0.10"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+# Proc-macros and build scripts must stay unstripped: Xcode 27's `strip`
+# leaves dylibs that fail to dlopen ("mis-aligned LINKEDIT string pool").
+[profile.release.build-override]
+strip = false

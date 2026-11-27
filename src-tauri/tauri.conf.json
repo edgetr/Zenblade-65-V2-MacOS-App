@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Zenblade",
+  "mainBinaryName": "Zenblade",
+  "version": "../package.json",
+  "identifier": "com.local.zenblade",
+  "build": {
+    "frontendDist": "../build/web",
+    "beforeDevCommand": {
+      "script": "bash scripts/stage-web.sh",
+      "cwd": ".."
+    },
+    "beforeBuildCommand": {
+      "script": "bash scripts/stage-web.sh",
+      "cwd": ".."
+    }
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'",
+      "freezePrototype": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app"
+    ],
+    "category": "Utility",
+    "copyright": "Your personal Zenblade 65 V2 companion",
+    "shortDescription": "Mac app for the Pwnage Zenblade 65 V2 keyboard",
+    "icon": [
+      "../build/icon.icns",
+      "../build/icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-",
+      "files": {
+        "Resources/Assets.car": "../build/Assets.car"
+      },
+      "dmg": {
+        "background": "../build/dmg-background.png",
+        "windowSize": {
+          "width": 640,
+          "height": 440
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 239
+        },
+        "applicationFolderPosition": {
+          "x": 460,
+          "y": 239
+        }
+      }
+    },
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEzOEZDN0U0QUNERTUzNTkKUldSWlU5NnM1TWVQbzBvaVMxeVNtVm5rNUFqVWhrWmpPZnFYMWtOSHhoK0FicGdYcHU1VU9OVUwK",
+      "endpoints": [
+        "https://github.com/edgetr/Zenblade-65-V2-MacOS-App/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true
+    }
+  }
+}

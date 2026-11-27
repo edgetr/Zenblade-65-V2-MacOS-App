@@ -113,9 +113,9 @@ export function installBootstrapUi({
       ][
         Number(event.key) - 1
       ];
-      // macOS routes Command-number through the native View menu. Keeping the
-      // renderer fallback makes Control-number work on other platforms.
-      if (!event.metaKey) navigate(panel);
+      // WebKit offers Command-key events to the page before the menu bar, and
+      // a prevented event never reaches the View menu, so navigate here.
+      navigate(panel);
       return;
     }
     if (command && event.key === "Enter") {
@@ -257,6 +257,7 @@ export function installBootstrapUi({
         info: kb.info,
       }),
       connect,
+      device: kb,
       refresh: () => refresh(),
       saveStore: () => model.flush(),
       async roundTripColor(hue = 0, saturation = 100) {

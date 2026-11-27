@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "Native features for the bundled Zenblade page in the main window only.",
+  "windows": [
+    "main"
+  ],
+  "local": true,
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-set-title",
+    "allow-app-get-info",
+    "allow-app-get-active-application",
+    "allow-app-set-desktop-state",
+    "allow-app-get-system-context",
+    "allow-app-configure-system-shortcuts",
+    "allow-app-choose-applications",
+    "allow-app-export-profile",
+    "allow-app-import-profile",
+    "allow-hid-get-devices",
+    "allow-hid-open",
+    "allow-hid-close",
+    "allow-hid-send"
+  ]
+}

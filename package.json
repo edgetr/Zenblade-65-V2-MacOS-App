@@ -1,9 +1,8 @@
 {
   "name": "zenblade",
   "productName": "Zenblade",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Mac app for the Pwnage Zenblade 65 V2 keyboard",
-  "main": "electron/main.js",
   "author": "edgetr",
   "license": "MIT",
   "repository": {
@@ -12,91 +11,18 @@
   },
   "homepage": "https://github.com/edgetr/Zenblade-65-V2-MacOS-App",
   "scripts": {
-    "start": "npm run build:native && electron .",
-    "dev": "npm run build:native && electron . --dev",
-    "build:native": "bash scripts/build-native.sh",
-    "build": "npm run build:native && npm run build:icons && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
+    "start": "tauri dev",
+    "dev": "tauri dev",
+    "build": "npm run build:icons && tauri build --bundles app",
+    "build:icons": "bash scripts/build-icons.sh",
+    "test": "node --experimental-default-type=module --test && cargo test --quiet --manifest-path src-tauri/Cargo.toml",
     "install-app": "bash scripts/install.sh",
     "update": "bash scripts/install.sh",
-    "test": "node --experimental-default-type=module --test",
-    "release:dmg": "bash scripts/release-dmg.sh",
-    "preview:release": "node scripts/preview-release.mjs",
-    "build:icons": "bash scripts/build-icons.sh"
+    "release": "bash scripts/release.sh",
+    "release:publish": "bash scripts/release.sh --publish",
+    "preview:release": "node scripts/preview-release.mjs"
   },
   "devDependencies": {
-    "electron": "^43.1.0",
-    "electron-builder": "^26.15.3"
-  },
-  "build": {
-    "appId": "com.local.zenblade",
-    "productName": "Zenblade",
-    "directories": {
-      "output": "dist",
-      "buildResources": "build"
-    },
-    "files": [
-      "electron/**/*",
-      "renderer/**/*",
-      "shared/**/*",
-      "build/icon.png",
-      "build/icon.icns",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "build/zenbridge",
-        "to": "zenbridge"
-      },
-      {
-        "from": "build/Assets.car",
-        "to": "Assets.car"
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.utilities",
-      "icon": "build/icon.icns",
-      "target": [
-        {
-          "target": "dir",
-          "arch": [
-            "arm64"
-          ]
-        }
-      ],
-      "identity": null,
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false,
-      "extendInfo": {
-        "CFBundleDisplayName": "Zenblade",
-        "CFBundleName": "Zenblade",
-        "CFBundleIdentifier": "com.local.zenblade",
-        "CFBundleIconName": "Zenblade"
-      },
-      "minimumSystemVersion": "12.0"
-    },
-    "dmg": {
-      "background": "build/dmg-background.png",
-      "icon": "build/icon.icns",
-      "iconSize": 88,
-      "iconTextSize": 13,
-      "title": "Zenblade ${version}",
-      "artifactName": "Zenblade-${version}-${arch}.${ext}",
-      "format": "UDZO",
-      "filesystem": "HFS+",
-      "writeUpdateInfo": false,
-      "contents": [
-        {
-          "x": 180,
-          "y": 239,
-          "type": "file"
-        },
-        {
-          "x": 460,
-          "y": 239,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ]
-    }
+    "@tauri-apps/cli": "^2.9.6"
   }
 }

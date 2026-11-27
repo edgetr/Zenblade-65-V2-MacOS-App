@@ -1,0 +1,3 @@
+[build]
+# Keep build output out of iCloud Desktop sync (".nosync" is never uploaded).
+target-dir = "target.nosync"

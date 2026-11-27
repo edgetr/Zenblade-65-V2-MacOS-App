@@ -1,48 +1,74 @@
 {
-  "features": [
-    "refractivity"
-  ],
   "fill": {
-    "solid": "extended-srgb:0.72549,0.85490,0.80784,1.00000"
+    "automatic-gradient": "extended-srgb:0.47059,0.20392,0.85098,1.00000"
   },
+  "fill-specializations": [
+    {
+      "appearance": "dark",
+      "value": {
+        "automatic-gradient": "extended-srgb:0.17255,0.09804,0.30196,1.00000"
+      }
+    }
+  ],
   "groups": [
     {
-      "blur-material": 0.25,
+      "name": "Legend",
       "layers": [
         {
+          "name": "blade-z",
+          "image-name": "blade-z.svg",
           "glass": false,
-          "image-name": "z-legend.svg",
-          "name": "z-legend"
-        },
-        {
-          "image-name": "keycap-face.svg",
-          "name": "keycap-face"
-        },
-        {
-          "image-name": "keycap-base.svg",
-          "name": "keycap-base"
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.87059,0.81569,1.00000,1.00000"
+              }
+            }
+          ]
         }
       ],
-      "refractivity": {
-        "depth": 0.12,
-        "enabled": true,
-        "strength": 0.35
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.35
       },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "name": "Keycap",
+      "layers": [
+        {
+          "name": "keycap-top",
+          "image-name": "keycap-top.svg"
+        },
+        {
+          "name": "keycap-skirt",
+          "image-name": "keycap-skirt.svg",
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.29804,0.21569,0.52157,1.00000"
+              }
+            }
+          ]
+        }
+      ],
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.6
+        "opacity": 0.55
       },
       "translucency": {
         "enabled": true,
-        "value": 0.55
+        "value": 0.3
       },
-      "name": "Keycap"
+      "specular": true
     }
   ],
   "supported-platforms": {
-    "circles": [
-      "watchOS"
-    ],
     "squares": "shared"
   }
 }

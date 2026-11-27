@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { createModel } from "../renderer/js/state.js";
 import {
   automationHasTargets,
@@ -72,15 +71,6 @@ import {
 import deviceIds from "../shared/device-ids.json" with { type: "json" };
 
 const codes = { KeyA: 0 };
-const require = createRequire(import.meta.url);
-const {
-  assertSupportedProfileFile,
-  parseFrontApplication,
-} = require("../electron/desktop.js");
-const {
-  normalizeAudio,
-  normalizeDetectors,
-} = require("../electron/system-bridge.js");
 const memory = () => {
   let value = null;
   return {
@@ -298,32 +288,6 @@ test("profile replace keeps other profiles and automation rules intact", () => {
   assert.equal(model.state.automation.rules[0].bundleId, "com.example.app");
 });
 
-test("profile file envelopes are rejected before import confirmation or export", () => {
-  const supported = {
-    format: "zenblade-profile",
-    version: 1,
-    profile: {
-      lighting: {},
-      actuation: {},
-      keyOverrides: {},
-      appNotes: {},
-    },
-  };
-  assert.equal(assertSupportedProfileFile(supported), supported);
-  assert.throws(
-    () => assertSupportedProfileFile({ ...supported, version: 2 }),
-    /not a supported Zenblade profile/,
-  );
-  assert.throws(
-    () =>
-      assertSupportedProfileFile({
-        ...supported,
-        profile: { ...supported.profile, keyOverrides: [] },
-      }),
-    /not a supported Zenblade profile/,
-  );
-});
-
 test("wake recovery attempts run sequentially and stop after success", async () => {
   const events = [];
   let attempts = 0;
@@ -356,17 +320,6 @@ test("superseded wake recovery stops before another device attempt", async () =>
   });
   assert.equal(recovered, false);
   assert.equal(attempts, 1);
-});
-
-test("permission-free macOS foreground metadata is parsed defensively", () => {
-  assert.deepEqual(
-    parseFrontApplication(`
-"Example App" ASN:0x0-0x123:
-    bundleID="com.example.app"
-  `),
-    { bundleId: "com.example.app", name: "Example App" },
-  );
-  assert.equal(parseFrontApplication("bundleID is unavailable"), null);
 });
 
 test("preview and chrome retain distinct legibility policy", () => {
@@ -851,12 +804,12 @@ test("keyboard-first navigation uses one board tab stop and app shortcuts", () =
     new URL("../renderer/js/bootstrap-ui.js", import.meta.url),
     "utf8",
   );
-  const mainSource = readFileSync(
-    new URL("../electron/main.js", import.meta.url),
+  const menuSource = readFileSync(
+    new URL("../src-tauri/src/menu.rs", import.meta.url),
     "utf8",
   );
-  const preloadSource = readFileSync(
-    new URL("../electron/preload.js", import.meta.url),
+  const shellSource = readFileSync(
+    new URL("../renderer/js/native-shell.js", import.meta.url),
     "utf8",
   );
   assert.match(
@@ -866,11 +819,12 @@ test("keyboard-first navigation uses one board tab stop and app shortcuts", () =
   assert.match(boardSource, /"ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"/);
   assert.match(bootstrapSource, /\^\[1-6\]\$/);
   assert.match(bootstrapSource, /command && event\.key === "Enter"/);
-  assert.match(mainSource, /accelerator: "CmdOrCtrl\+1"/);
-  assert.match(mainSource, /accelerator: "CmdOrCtrl\+4"/);
-  assert.match(mainSource, /accelerator: "CmdOrCtrl\+5"/);
-  assert.match(mainSource, /accelerator: "CmdOrCtrl\+6"/);
-  assert.match(preloadSource, /onNavigate/);
+  for (const [index, panel] of [
+    "keyboard", "lighting", "actuation", "profiles", "advanced", "system",
+  ].entries()) {
+    assert.match(menuSource, new RegExp(`"CmdOrCtrl\\+${index + 1}", "${panel}"`));
+  }
+  assert.match(shellSource, /onNavigate: subscribe\("app:navigate"/);
   assert.match(bootstrapSource, /onNavigate\?\.\(\(panel\) => navigate\(panel\)\)/);
 });
 
@@ -1032,12 +986,12 @@ test("System remains a keyboard configuration surface", () => {
     new URL("../renderer/index.html", import.meta.url),
     "utf8",
   );
-  const main = readFileSync(
-    new URL("../electron/main.js", import.meta.url),
+  const main = ["lib.rs", "menu.rs", "commands.rs"].map((file) => readFileSync(
+    new URL(`../src-tauri/src/${file}`, import.meta.url),
     "utf8",
-  );
+  )).join("\n");
   const preload = readFileSync(
-    new URL("../electron/preload.js", import.meta.url),
+    new URL("../renderer/js/native-shell.js", import.meta.url),
     "utf8",
   );
   assert.match(html, /id="systemActionTrigger"/);
@@ -1095,31 +1049,4 @@ test("indicator overlay composes priority and describes an activity row", () => 
     }, 1),
     overlay,
   );
-});
-
-test("process detectors are bounded, deduplicated, and require a match", () => {
-  assert.deepEqual(normalizeDetectors([
-    { id: "codex", match: " Codex " },
-    { id: "codex", match: "other" },
-    { id: "empty", match: "" },
-  ]), [{ id: "codex", match: "codex" }]);
-});
-
-test("native audio values are normalized to a boolean bridge contract", () => {
-  const audio = normalizeAudio({
-    micMuted: 1,
-    canMuteInput: 0,
-    devices: [{
-      uid: "input",
-      input: 1,
-      output: 0,
-      defaultInput: 1,
-      defaultOutput: 0,
-    }],
-  });
-  assert.equal(audio.micMuted, true);
-  assert.equal(audio.canMuteInput, false);
-  assert.equal(audio.devices[0].input, true);
-  assert.equal(audio.devices[0].output, false);
-  assert.equal(audio.devices[0].defaultInput, true);
 });

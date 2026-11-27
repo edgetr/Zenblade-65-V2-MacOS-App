@@ -67,4 +67,4 @@ Rules match exact macOS bundle identifiers; the app does not assume or hardcode 
 
 Zenblade remains available from the macOS menu bar when its window is closed. The menu provides the current connection state, Profile 1–3, lighting power, automatic switching, reconnect, and a shortcut back to the main window.
 
-After sleep, wake, unlock, or a supported keyboard reconnect, the app reuses the existing WebHID permission and restores the current profile without opening a new device chooser. If the keyboard is unavailable, local settings remain intact and **Connect keyboard** stays available.
+After sleep, wake, unlock, or a supported keyboard reconnect, the app reconnects to the keyboard automatically and restores the current profile without opening a device chooser. If the keyboard is unavailable, local settings remain intact and **Connect keyboard** stays available.
