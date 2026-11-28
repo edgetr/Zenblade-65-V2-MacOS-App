@@ -20,7 +20,7 @@ Settings remain editable while disconnected. System status maps are **app previe
 
 ## Install
 
-1. Download **[Zenblade-0.2.0-arm64.dmg](https://github.com/edgetr/Zenblade-65-V2-MacOS-App/releases/latest/download/Zenblade-0.2.0-arm64.dmg)** from the [latest release](https://github.com/edgetr/Zenblade-65-V2-MacOS-App/releases/latest).
+1. Download **[Zenblade-0.2.1-arm64.dmg](https://github.com/edgetr/Zenblade-65-V2-MacOS-App/releases/latest/download/Zenblade-0.2.1-arm64.dmg)** from the [latest release](https://github.com/edgetr/Zenblade-65-V2-MacOS-App/releases/latest).
 2. Open the DMG and drag **Zenblade** to **Applications**.
 3. Try opening Zenblade. If macOS blocks it, go to **System Settings → Privacy & Security → Open Anyway**, then confirm **Open**. On macOS 12, use **System Preferences → Security & Privacy**.
 4. Connect your keyboard over USB and select **Connect keyboard**.
@@ -94,7 +94,7 @@ The app is written to `src-tauri/target.nosync/release/bundle/macos/Zenblade.app
 | `npm run release` | Build the DMG, checksum, signed update and `latest.json` into `dist/` |
 | `npm run release:publish` | Do the above and publish the GitHub release |
 
-[Architecture and contribution guide](docs/DEVELOPMENT.md) · [V0.2 release notes](docs/releases/v0.2.0.md) · [V0.1 release notes](docs/releases/v0.1.md)
+[Architecture and contribution guide](docs/DEVELOPMENT.md) · [V0.2.1 release notes](docs/releases/v0.2.1.md) · [V0.2 release notes](docs/releases/v0.2.0.md) · [V0.1 release notes](docs/releases/v0.1.md)
 
 ## Review the code and give feedback
 

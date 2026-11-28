@@ -1,7 +1,7 @@
 {
   "name": "zenblade",
   "productName": "Zenblade",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Mac app for the Pwnage Zenblade 65 V2 keyboard",
   "author": "edgetr",
   "license": "MIT",

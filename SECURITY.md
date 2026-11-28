@@ -25,7 +25,7 @@ Release DMGs are **ad-hoc signed**, without an Apple Developer ID certificate or
 The release includes a SHA-256 checksum. Save it next to the DMG and run:
 
 ```bash
-shasum -a 256 -c Zenblade-0.2.0-arm64.dmg.sha256
+shasum -a 256 -c Zenblade-0.2.1-arm64.dmg.sha256
 ```
 
 A matching checksum verifies that your file matches the release asset; it does not independently establish that the app is safe. You can instead [build from source](README.md#build-from-source).
