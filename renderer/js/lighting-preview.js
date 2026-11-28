@@ -4,7 +4,7 @@ import { baseWireColor, keyDisplayColor } from "./preview.js";
 import { modeById } from "./lighting-modes.js";
 
 const KEYBOARD_UNITS = 16;
-export function effectPreviewKeys(lighting) {
+export function effectPreviewKeys(lighting, phase = null) {
   return ROWS.flatMap((row, rowIndex) => {
     let x = 0;
     return row.map((key) => {
@@ -20,7 +20,7 @@ export function effectPreviewKeys(lighting) {
           row: rowIndex,
           colCount: KEYBOARD_UNITS,
           rowCount: ROWS.length,
-        }),
+        }, phase),
       };
       x += width;
       return previewKey;
@@ -85,35 +85,40 @@ export function colorSwatchPlan(lighting, mode = modeById(lighting?.mode)) {
   };
 }
 
-export function paintEffectPreview(root, lighting, mode) {
+const previewNodes = new WeakMap();
+
+export function paintEffectPreview(root, lighting, mode, phase = null) {
   if (!root) return;
-  const previewKeys = effectPreviewKeys(lighting);
+  const previewKeys = effectPreviewKeys(lighting, phase);
   root.dataset.previewKind = effectPreviewKind(mode);
   root.setAttribute("aria-label", effectPreviewDescription(lighting, mode));
 
-  const matchingLayout = root.children.length === ROWS.length &&
-    [...root.children].every((row, index) => row.children.length === ROWS[index].length);
-  const rows = matchingLayout
-    ? [...root.children]
-    : ROWS.map(() => {
+  // Build the key nodes once; each repaint only updates their colours.
+  let nodes = previewNodes.get(root);
+  if (!nodes) {
+    root.replaceChildren();
+    nodes = new Map();
+    const rows = ROWS.map(() => {
       const row = document.createElement("div");
       row.className = "effect-preview__row";
       root.append(row);
       return row;
     });
-
-  previewKeys.forEach((previewKey) => {
-    const row = rows[previewKey.row];
-    let key = row.querySelector(`[data-code="${previewKey.code}"]`);
-    if (!key) {
-      key = document.createElement("span");
+    previewKeys.forEach((previewKey) => {
+      const key = document.createElement("span");
       key.className = "effect-preview__key";
       key.dataset.code = previewKey.code;
       key.setAttribute("aria-hidden", "true");
       key.textContent = previewKey.label;
-      row.append(key);
-    }
-    key.style.gridColumn = `span ${Math.round(previewKey.width * 4)}`;
+      key.style.gridColumn = `span ${Math.round(previewKey.width * 4)}`;
+      rows[previewKey.row].append(key);
+      nodes.set(previewKey.code, key);
+    });
+    previewNodes.set(root, nodes);
+  }
+
+  previewKeys.forEach((previewKey) => {
+    const key = nodes.get(previewKey.code);
     key.style.setProperty("--preview-rgb", rgbToCss(previewKey.rgb));
     key.style.setProperty("--preview-glow", rgbToCss(previewKey.rgb, 0.52));
   });

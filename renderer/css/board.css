@@ -170,3 +170,39 @@
 .key.is-override::before {
   opacity: 1;
 }
+
+.board-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 0 0 10px;
+}
+
+.board-toolbar__hint {
+  margin: 0;
+  color: var(--fg-mute);
+  font-size: var(--text-xs);
+}
+
+/* Press point of a key with its own feel, e.g. "0.8". */
+.key__badge {
+  position: absolute;
+  right: max(3px, calc(var(--u, 42px) * 0.1));
+  bottom: max(2px, calc(var(--u, 42px) * 0.08));
+  font-size: max(7px, min(10px, calc(var(--u, 42px) * 0.19)));
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.key__badge:empty {
+  display: none;
+}
+
+.board--interactive .key.is-selected.is-multi {
+  outline-style: dashed;
+}

@@ -10,6 +10,9 @@ const ELECTRON_PRELOAD_API = [
   "getInfo",
   "getActiveApplication",
   "chooseApplications",
+  "runningApplications",
+  "getLoginItem",
+  "setLoginItem",
   "exportProfile",
   "importProfile",
   "getSystemContext",
@@ -25,6 +28,7 @@ const ELECTRON_PRELOAD_API = [
   "onSuspend",
   "onSystemContext",
   "onSystemActionError",
+  "onLoginItem",
 ];
 
 function boot({ devices = [], fail = {} } = {}) {

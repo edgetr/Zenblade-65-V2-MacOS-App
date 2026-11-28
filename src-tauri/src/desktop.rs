@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 const PS_TIMEOUT: Duration = Duration::from_millis(3000);
 
-use objc2_app_kit::NSWorkspace;
+use objc2_app_kit::{NSApplicationActivationPolicy, NSWorkspace};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -35,6 +35,32 @@ pub fn front_application() -> Option<ApplicationInfo> {
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| bundle_id.clone());
     Some(ApplicationInfo { bundle_id, name })
+}
+
+/// Regular (Dock) apps that are running now, for one-click automatic profile
+/// rules. Excludes Zenblade itself.
+pub fn running_applications() -> Vec<ApplicationInfo> {
+    let workspace = NSWorkspace::sharedWorkspace();
+    let mut seen = HashSet::new();
+    let mut apps: Vec<ApplicationInfo> = workspace
+        .runningApplications()
+        .iter()
+        .filter(|app| app.activationPolicy() == NSApplicationActivationPolicy::Regular)
+        .filter_map(|app| {
+            let bundle_id = app.bundleIdentifier()?.to_string();
+            if bundle_id.is_empty() || bundle_id == APP_BUNDLE_ID || !seen.insert(bundle_id.clone()) {
+                return None;
+            }
+            let name = app
+                .localizedName()
+                .map(|n| n.to_string())
+                .filter(|n| !n.is_empty())
+                .unwrap_or_else(|| bundle_id.clone());
+            Some(ApplicationInfo { bundle_id, name })
+        })
+        .collect();
+    apps.sort_by_key(|app| app.name.to_lowercase());
+    apps
 }
 
 pub fn read_application_metadata(app_path: &Path) -> Option<ApplicationInfo> {

@@ -14,7 +14,7 @@ import {
   colorSwatchPlan,
   paintEffectPreview,
 } from "./lighting-preview.js";
-import { baseWireColor } from "./preview.js";
+import { baseWireColor, lightingModeAnimates } from "./preview.js";
 import { lightingWirePreview, normalizeLighting } from "./protocol.js";
 import { $ } from "./dom.js";
 
@@ -35,6 +35,31 @@ export const lightingMatches = (left, right) =>
   !!left && !!right && lightingKeys.every((key) => left[key] === right[key]);
 export const lightingIsDirty = (lighting, baseline) =>
   !baseline || !lightingMatches(lighting, baseline);
+
+export const COLOR_PRESETS = Object.freeze([
+  ["Red", "#FF0000"],
+  ["Orange", "#FF6A00"],
+  ["Amber", "#FFB000"],
+  ["Green", "#00FF40"],
+  ["Cyan", "#00E5FF"],
+  ["Blue", "#0040FF"],
+  ["Violet", "#7A00FF"],
+  ["Pink", "#FF00A0"],
+  ["White", "#FFFFFF"],
+]);
+
+export const parseHexColor = (value) => {
+  const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(value).trim());
+  if (!match) return null;
+  const hex = match[1].length === 3
+    ? match[1].split("").map((c) => c + c).join("")
+    : match[1];
+  return `#${hex.toUpperCase()}`;
+};
+
+// One full cycle of an animated preview takes 20 s at speed 0 and 2 s at 100.
+export const previewCyclesPerSecond = (speed) =>
+  0.05 + Math.max(0, Math.min(100, Number(speed) || 0)) / 100 * 0.45;
 
 export function createLightingUi({ model, paint, onChromeChange, onLightingPaint }) {
   const { state, setLighting } = model;
@@ -223,10 +248,20 @@ export function createLightingUi({ model, paint, onChromeChange, onLightingPaint
     if (document.activeElement !== $("lightColorPicker")) {
       $("lightColorPicker").value = baseHex;
     }
-    $("simpleColorReadout").textContent = baseHex;
+    if (document.activeElement !== $("simpleColorReadout")) {
+      $("simpleColorReadout").value = baseHex;
+      $("simpleColorReadout").classList.remove("is-invalid");
+    }
     $("simpleColorReadout").title =
       `Hue ${wire.hue}° · Sat ${wire.saturation}% · Bright ${wire.brightness}%`;
-    paintEffectPreview($("effectPreview"), lighting, mode);
+    $("colorPresets").querySelectorAll(".color-preset").forEach((button) => {
+      const rgb = hexToRgb(button.dataset.hex);
+      const preset = rgbToHex(baseWireColor({ ...lighting, ...lightingColorUpdate(rgb) }));
+      button.setAttribute("aria-pressed", String(preset.toUpperCase() === baseHex));
+    });
+    // Keep the running animation's frame instead of flashing a still one.
+    paintEffectPreview($("effectPreview"), lighting, mode, shouldAnimate() ? phase : null);
+    syncAnimation();
     visibility();
     onLightingPaint?.(lighting);
     syncApplyState();
@@ -323,6 +358,62 @@ export function createLightingUi({ model, paint, onChromeChange, onLightingPaint
     const rgb = hexToRgb(event.target.value);
     if (rgb) setColor(rgb);
   });
+  $("simpleColorReadout").addEventListener("input", (event) => {
+    const hex = parseHexColor(event.target.value);
+    event.target.classList.toggle("is-invalid", !hex && event.target.value.length >= 4);
+    if (hex) setColor(hexToRgb(hex));
+  });
+  $("simpleColorReadout").addEventListener("change", () => sync());
+  $("colorPresets").replaceChildren(...COLOR_PRESETS.map(([name, hex]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "color-preset";
+    button.dataset.hex = hex;
+    button.style.setProperty("--preset", hex);
+    button.title = `${name} ${hex}`;
+    button.setAttribute("aria-label", name);
+    button.addEventListener("click", () => setColor(hexToRgb(hex)));
+    return button;
+  }));
+
+  // Animated preview: runs only while the Lighting panel is on screen, the
+  // effect moves, and the system does not ask for reduced motion.
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  let animationFrame = 0;
+  let phase = 0;
+  let lastFrameAt = 0;
+  const shouldAnimate = () =>
+    state.lighting.isOn &&
+    lightingModeAnimates(state.lighting.mode) &&
+    !reducedMotion.matches &&
+    document.visibilityState === "visible" &&
+    !$("panel-lighting").hidden;
+  function animate(at) {
+    animationFrame = 0;
+    if (!shouldAnimate()) return;
+    // ~30 fps is plenty for a preview and halves the work of 60 fps.
+    if (at - lastFrameAt >= 33) {
+      const elapsed = lastFrameAt ? Math.min(100, at - lastFrameAt) / 1000 : 0;
+      lastFrameAt = at;
+      phase = (phase + elapsed * previewCyclesPerSecond(state.lighting.speed)) % 1;
+      paintEffectPreview($("effectPreview"), state.lighting, currentMode(), phase);
+    }
+    animationFrame = requestAnimationFrame(animate);
+  }
+  function syncAnimation() {
+    if (shouldAnimate()) {
+      if (!animationFrame) {
+        lastFrameAt = 0;
+        animationFrame = requestAnimationFrame(animate);
+      }
+    } else if (animationFrame) {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
+    }
+  }
+  reducedMotion.addEventListener("change", syncAnimation);
+  document.addEventListener("visibilitychange", syncAnimation);
+  document.addEventListener("zen:panel", syncAnimation);
 
   return {
     sync,

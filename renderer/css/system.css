@@ -220,7 +220,12 @@
 }
 
 .system-board .key {
-  pointer-events: none;
+  cursor: pointer;
+}
+
+.system-board .key:hover,
+.system-board .key:focus-visible {
+  outline: 1px solid rgba(var(--accent-rgb), 0.45);
 }
 
 .system-board .key.is-status {
@@ -490,4 +495,11 @@
   .system-row__body {
     grid-column: 1;
   }
+}
+
+.system-card__note {
+  margin: 4px 0 0;
+  color: var(--fg-mute);
+  font-size: var(--text-xs);
+  line-height: 1.45;
 }

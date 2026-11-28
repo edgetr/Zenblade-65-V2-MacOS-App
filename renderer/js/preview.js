@@ -72,12 +72,15 @@ const handlers = {
     return ctx;
   },
   breath: (ctx) => {
-    ctx.v *= .55 + .45 * Math.sin(ctx.p.x * Math.PI);
+    ctx.v *= ctx.t == null
+      ? .55 + .45 * Math.sin(ctx.p.x * Math.PI)
+      : .3 + .7 * (.5 + .5 * Math.sin(ctx.t * Math.PI * 2));
     return ctx;
   },
   band: (ctx) => {
-    if (ctx.r.channel === "s") ctx.s = 18 + ctx.p.x * 82;
-    else ctx.v = 22 + ctx.p.x * (ctx.base - 22);
+    const x = ctx.t == null ? ctx.p.x : (ctx.p.x - ctx.t + 1) % 1;
+    if (ctx.r.channel === "s") ctx.s = 18 + x * 82;
+    else ctx.v = 22 + x * (ctx.base - 22);
     return ctx;
   },
   pinwheel: (ctx) => {
@@ -119,18 +122,20 @@ const handlers = {
   },
   noise: (ctx) => {
     ctx.s = Math.max(ctx.s, 70);
-    const c = (ctx.pos.col * 17 + ctx.pos.row * 31) % 100;
+    const frame = ctx.t == null ? 0 : Math.floor(ctx.t * 24) * 13;
+    const c = (ctx.pos.col * 17 + ctx.pos.row * 31 + frame) % 100;
     ctx.h += c * 3.6;
     ctx.v *= .4 + (c % 60) / 100;
     return ctx;
   },
   "hue-breath": (ctx) => {
-    ctx.h += ctx.p.x * 40 - 20;
+    ctx.h += ctx.t == null ? ctx.p.x * 40 - 20 : Math.sin(ctx.t * Math.PI * 2) * 20;
     return ctx;
   },
   pendulum: (ctx) => {
     ctx.s = Math.max(ctx.s, 75);
-    ctx.h += Math.sin(ctx.p.x * Math.PI * 2) * 50 + ctx.p.y * 20;
+    const swing = ctx.t == null ? 0 : Math.sin(ctx.t * Math.PI * 2) * .5;
+    ctx.h += Math.sin((ctx.p.x + swing) * Math.PI * 2) * 50 + ctx.p.y * 20;
     return ctx;
   },
   wave: (ctx) => {
@@ -151,9 +156,30 @@ const handlers = {
   },
 };
 
+// Effects that move on the keyboard. Static gradients, typing-driven heatmaps
+// and reactive effects are drawn as a still frame.
+const STILL_KINDS = new Set(["solid", "heat", "reactive"]);
+export function lightingModeAnimates(mode) {
+  const recipe = recipes[mode];
+  return !!recipe && !STILL_KINDS.has(recipe.kind) && mode !== 3 && mode !== 4;
+}
+
+// Kinds whose motion is a hue rotation over the whole pattern.
+const HUE_CYCLE_KINDS = new Set([
+  "gradient",
+  "pinwheel",
+  "spiral",
+  "chevron",
+  "radial",
+  "beacon",
+  "steps",
+  "wave",
+]);
+
 // Pure per-key colour for keyboard and effect previews. Always quantizes to the
 // 8-bit wire values the firmware receives (no cosmetic brightness lift).
-export function keyDisplayColor(lighting, pos) {
+// `phase` (0–1) animates the preview; omit it for a still frame.
+export function keyDisplayColor(lighting, pos, phase = null) {
   const L = lightingWirePreview(lighting);
   if (!L.isOn || L.mode === 0) return OFF;
   const p = norm(pos);
@@ -167,8 +193,10 @@ export function keyDisplayColor(lighting, pos) {
     r,
     base,
     pos,
+    t: phase != null && lightingModeAnimates(L.mode) ? phase : null,
   };
   ctx = (handlers[r.kind] || handlers.solid)(ctx);
+  if (ctx.t != null && HUE_CYCLE_KINDS.has(r.kind)) ctx.h += ctx.t * 360;
   if (r.minS != null) ctx.s = Math.max(ctx.s, r.minS);
   return hsvToRgb(ctx.h, ctx.s, ctx.v);
 }

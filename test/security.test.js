@@ -25,7 +25,7 @@ test('native commands are limited to the bundled page in the main window', () =>
   const sources = [commands, hid];
   const handlers = sources.flatMap((source) =>
     [...source.matchAll(/#\[tauri::command\]\npub (?:async )?fn (\w+)\(/g)].map((m) => [source, m[1]]));
-  assert.equal(handlers.length, 12);
+  assert.equal(handlers.length, 15);
   for (const [source, name] of handlers) {
     const body = source.slice(source.indexOf(`fn ${name}(`));
     assert.match(body.slice(0, 500), /trusted(?:_webview)?\(&webview\)/, `${name} checks its caller`);

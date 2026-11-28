@@ -12,11 +12,11 @@ import {
 } from "./device-ops.js";
 import { createProfileController } from "./profile-controller.js";
 import { applyTheme } from "./theme.js";
-import { initHelpTips } from "./help-tips.js";
 import { installBootstrapUi } from "./bootstrap-ui.js";
 import { createDesktopController } from "./desktop-controller.js";
 import { createAdvancedUi } from "./advanced-ui.js";
 import { createSystemUi } from "./system-ui.js";
+import { installTypingTest } from "./typing-test.js";
 import { $ } from "./dom.js";
 
 const kb = new ZenbladeDevice();
@@ -42,6 +42,12 @@ const ui = {
   system: null,
 };
 
+// Stamp of the Feel settings last written to the keyboard; Apply stays
+// disabled until something differs from it.
+let feelBaseline = null;
+const feelStamp = () =>
+  JSON.stringify([state.profile, state.actuation, state.keyOverrides]);
+
 function syncChrome() {
   const connected = state.connected;
   const running = gate.running;
@@ -53,7 +59,7 @@ function syncChrome() {
   $("btnRefresh").hidden = !connected;
   document.querySelector(".connect-top").toggleAttribute("data-connected", connected);
   $("btnApplyLighting").disabled = deviceBusy || !lightingDirty;
-  $("btnApplyActuation").disabled = deviceBusy;
+  $("btnApplyActuation").disabled = deviceBusy || feelStamp() === feelBaseline;
   $("btnApplyKey").disabled = running || !hasKeySelected;
   $("btnResetKey").disabled = running || !hasKeySelected;
   $("btnImportProfile").disabled = running;
@@ -79,7 +85,10 @@ function setConnected(on, info) {
   $("statPid").textContent = info
     ? `0x${info.productId.toString(16).padStart(4, "0")}`
     : "—";
-  if (!on) ui.lighting?.clearAppliedBaseline();
+  if (!on) {
+    ui.lighting?.clearAppliedBaseline();
+    feelBaseline = null;
+  }
   syncChrome();
   ui.profiles?.sync();
   ui.advanced?.connectionChanged();
@@ -89,8 +98,8 @@ function setConnected(on, info) {
 
 const board = createBoard({
   state,
-  onSelect: (code) => {
-    editor.open(code);
+  onSelect: (code, options) => {
+    editor.open(code, options);
     syncChrome();
   },
   // Intentionally no onPaint → lighting.sync(): selection/override paints must
@@ -106,6 +115,7 @@ ui.lighting = createLightingUi({
 const lighting = ui.lighting;
 
 async function writeFeel() {
+  const stamp = feelStamp();
   const values = buildActuationMatrix(
     state,
     KEY_COUNT,
@@ -114,13 +124,18 @@ async function writeFeel() {
   return kb.writeActuationMatrix({
     profileIndex: state.profile,
     rapidTrigger: state.actuation.rapidTrigger,
+    continuousRapidTrigger: state.actuation.continuousRapidTrigger,
     ...values,
+  }).then((result) => {
+    feelBaseline = stamp;
+    return result;
   });
 }
 
 const editor = createKeyEditor({
   model,
   paint: board.paint,
+  onChange: () => syncChrome(),
   toast,
   connected: () => state.connected,
   onApply: async () => {
@@ -158,7 +173,31 @@ ui.profiles = createProfilesUi({
   connected: () => state.connected,
   onSelect: profileController.select,
   onRetry: profileController.retry,
+  onRunningApplications: () => window.zenShell?.runningApplications?.(),
+  onCopy: async (target) => {
+    const source = state.profile;
+    await gate.run("Profile copy", async () => {
+      model.duplicateProfile(source, target);
+      // SOCD lives in each onboard profile and can be written without
+      // switching; everything else is applied when the profile is selected.
+      if (kb.connected && state.socd) await kb.writeSocd(target, state.socd);
+    });
+    syncAll();
+    toast(`${model.labelFor(source)} copied to ${model.labelFor(target)}`, "ok");
+  },
+  onReset: async () => {
+    const applied = await gate.run("Profile reset", async () => {
+      model.resetProfile(state.profile);
+      lighting.clearAppliedBaseline();
+      syncAll();
+      return profileController.applyCurrentWithinGate({ quiet: true });
+    });
+    if (applied.localOnly || profileApplyComplete(applied)) {
+      toast(`${model.labelFor(state.profile)} reset`, "ok");
+    }
+  },
   onAutomationChange: () => ui.desktop?.automationChanged(),
+  onNamesChange: () => ui.desktop?.report(),
   onChooseApplications: () => window.zenShell?.chooseApplications?.(),
   onExport: async () => {
     const result = await window.zenShell?.exportProfile?.({
@@ -182,9 +221,11 @@ ui.profiles = createProfilesUi({
     // device gate so a concurrent apply cannot interleave with import writes.
     const applied = await gate.run("Profile import", async () => {
       const targetIsActive = state.profile === targetProfile;
-      model.replaceProfile(targetProfile, result.data.profile);
+      const imported = model.replaceProfile(targetProfile, result.data.profile);
       syncAll();
-      if (!kb.connected || !targetIsActive) return { localOnly: true };
+      if (!kb.connected) return { localOnly: true };
+      if (imported.socd) await kb.writeSocd(targetProfile, imported.socd);
+      if (!targetIsActive) return { localOnly: true };
       return profileController.applyCurrentWithinGate({ quiet: true });
     });
     if (
@@ -193,8 +234,8 @@ ui.profiles = createProfilesUi({
     ) {
       toast(
         applied.localOnly
-          ? `Profile ${targetProfile + 1} imported locally`
-          : `Profile ${targetProfile + 1} imported and applied`,
+          ? `${model.labelFor(targetProfile)} imported locally`
+          : `${model.labelFor(targetProfile)} imported and applied`,
         "ok",
       );
     }
@@ -204,6 +245,7 @@ ui.profiles = createProfilesUi({
 
 ui.advanced = createAdvancedUi({
   kb,
+  model,
   state,
   gate,
   toast,
@@ -217,7 +259,7 @@ ui.system = createSystemUi({
   gate,
   board,
   toast,
-  onChromeChange: syncChrome,
+  onDesktopChange: () => ui.desktop?.report(),
 });
 
 const refresh = profileController.refresh;
@@ -252,7 +294,7 @@ async function disconnect() {
   toast("Disconnected");
 }
 
-initHelpTips();
+installTypingTest();
 syncAll();
 setConnected(false, null);
 const bootstrap = installBootstrapUi({

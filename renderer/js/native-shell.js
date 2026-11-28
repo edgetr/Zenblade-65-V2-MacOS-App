@@ -36,6 +36,10 @@
       getInfo: () => call("app_get_info"),
       getActiveApplication: () => call("app_get_active_application"),
       chooseApplications: () => call("app_choose_applications"),
+      runningApplications: () => call("app_running_applications"),
+      getLoginItem: () => call("app_get_login_item"),
+      setLoginItem: (enabled) =>
+        call("app_set_login_item", { enabled: enabled === true }),
       exportProfile: (data) => call("app_export_profile", { payload: data ?? null }),
       importProfile: (profile) =>
         call("app_import_profile", { targetProfile: profile ?? null }),
@@ -56,6 +60,7 @@
       onSuspend: subscribe("app:suspend"),
       onSystemContext: subscribe("app:systemContext", payload),
       onSystemActionError: subscribe("app:systemActionError", payload),
+      onLoginItem: subscribe("app:loginItem", payload),
     }),
   });
 

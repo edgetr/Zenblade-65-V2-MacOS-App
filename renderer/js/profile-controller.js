@@ -1,4 +1,4 @@
-import { PROFILE_COUNT } from "./protocol.js";
+import { PROFILE_COUNT, reconcileLighting } from "./protocol.js";
 import { applyProfile, profileApplyComplete } from "./device-ops.js";
 
 export function createProfileController({
@@ -30,14 +30,14 @@ export function createProfileController({
       model.selectProfile(target);
       sync();
       if (!kb.connected) {
-        if (!quiet) toast(`Profile ${target + 1} selected`, "ok");
+        if (!quiet) toast(`${model.labelFor(target)} selected`, "ok");
         return { ok: true, localOnly: true };
       }
       const result = await applyProfile(kb, state, writeFeel, writeSystem);
       if (result.lightingOk) onLightingApplied?.(state.lighting);
       if (profileApplyComplete(result)) {
         setSyncIncomplete(null);
-        if (!quiet) toast(`Profile ${target + 1} applied`, "ok");
+        if (!quiet) toast(`${model.labelFor(target)} applied`, "ok");
         return { ok: true, result };
       }
       if (!result.deviceProfileOk) {
@@ -45,7 +45,7 @@ export function createProfileController({
         sync();
         if (!quiet) {
           toast(
-            `Profile ${target + 1} could not be selected on the keyboard.`,
+            `${model.labelFor(target)} could not be selected on the keyboard.`,
             "error",
           );
         }
@@ -54,7 +54,7 @@ export function createProfileController({
       setSyncIncomplete({ profile: target, result });
       if (!quiet) {
         toast(
-          `Profile ${target + 1} is partially applied. Re-apply it to recover.`,
+          `${model.labelFor(target)} is partially applied. Re-apply it to recover.`,
           "error",
         );
       }
@@ -82,7 +82,7 @@ export function createProfileController({
     if (result.lightingOk) onLightingApplied?.(state.lighting);
     if (profileApplyComplete(result)) {
       setSyncIncomplete(null);
-      if (!quiet) toast(`Profile ${state.profile + 1} applied`, "ok");
+      if (!quiet) toast(`${model.labelFor(state.profile)} applied`, "ok");
     } else {
       setSyncIncomplete({ profile: state.profile, result });
       if (!silent) {
@@ -119,7 +119,7 @@ export function createProfileController({
       result.profileError = error;
     }
     try {
-      const lighting = await kb.readLighting();
+      const lighting = reconcileLighting(await kb.readLighting(), state.lighting);
       if (result.profileOk) {
         model.setLighting(lighting, { persist: false });
         model.persist(true);

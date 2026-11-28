@@ -1,16 +1,22 @@
 import {
   EVENT_CODE_TO_HID,
   HID_ASSIGNMENTS,
+  HID_GROUP_ORDER,
+  hidGroup,
   LAYER_NAMES,
   PHYSICAL_KEYS,
   describeHid,
 } from "./advanced-data.js";
 import {
   MACRO_COUNT,
+  MACRO_STORAGE_BYTES,
   decodeMacros,
   encodeMacros,
+  macroByteLength,
   normalizeSocdConfig,
 } from "./protocol.js";
+import { createMacroRecorder } from "./macro-recorder.js";
+import { createKeyPicker } from "./key-picker.js";
 import { $ } from "./dom.js";
 
 const option = (value, label) => {
@@ -22,13 +28,16 @@ const option = (value, label) => {
 
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
+export function createAdvancedUi({ kb, model, state, gate, toast, onChromeChange }) {
   let keymaps = null;
   let socd = null;
   let socdProfile = null;
+  // The profile's stored SOCD when it was last loaded or saved here; drafts
+  // edit `socd` without touching it.
+  let socdSource = "";
   let macros = null;
-  let recording = false;
-  let lastRecordedAt = 0;
+  let recorder = null;
+  let macroListStamp = "";
 
   const selectedLayer = () => Number($("remapLayer").value);
   const selectedKey = () => Number($("remapKey").value);
@@ -52,9 +61,17 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     });
     $("socdKey1").prepend(option("", "Not assigned"));
     $("socdKey2").prepend(option("", "Not assigned"));
+    const groups = new Map(HID_GROUP_ORDER.map((label) => {
+      const group = document.createElement("optgroup");
+      group.label = label;
+      return [label, group];
+    }));
     HID_ASSIGNMENTS.forEach((item) =>
-      $("remapAssignment").append(option(item.value, item.label))
+      groups.get(hidGroup(item.value)).append(option(item.value, item.label))
     );
+    $("remapAssignment").append(...[...groups.values()].filter((group) =>
+      group.children.length
+    ));
     Array.from({ length: 10 }, (_, index) => {
       $("socdSlot").append(option(index, `Pair ${index + 1}`));
     });
@@ -63,11 +80,27 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     });
   }
 
+  const physicalByCode = new Map(PHYSICAL_KEYS.map((item) => [item.code, item]));
+  const remapPicker = createKeyPicker($("remapBoard"), {
+    onPick: (code) => {
+      const physical = physicalByCode.get(code);
+      if (!physical) return;
+      $("remapKey").value = String(physical.index);
+      syncRemap();
+    },
+    describe: (code) => {
+      const physical = physicalByCode.get(code);
+      const value = keymaps?.[selectedLayer()]?.[physical?.index];
+      return value == null ? physical?.label || code : `${physical.label} → ${describeHid(value)}`;
+    },
+  });
+
   function syncRemap() {
     const loaded = !!keymaps;
     const layer = selectedLayer();
     const key = selectedKey();
     const physical = PHYSICAL_KEYS.find((item) => item.index === key);
+    remapPicker.paint({ selected: physical?.code });
     const systemManaged = layer === 0 && state.system?.enabled &&
       state.system.keyActions?.some((item) =>
         item.triggerType !== "shortcut" && item.keyCode === physical?.code
@@ -111,13 +144,27 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
   function syncMacros() {
     const loaded = !!macros;
     const actions = macros?.[selectedMacro()] || [];
+    const bytes = loaded ? macroByteLength(macros) : 0;
+    const overBudget = bytes > MACRO_STORAGE_BYTES;
     $("btnRecordMacro").disabled = !loaded || !state.connected || gate.running;
     $("btnClearMacro").disabled = !loaded || actions.length === 0;
-    $("btnSaveMacro").disabled = !loaded || !state.connected || gate.running;
+    $("btnSaveMacro").disabled = !loaded || !state.connected || gate.running ||
+      overBudget;
     $("btnAddMacroDelay").disabled = !loaded;
     $("btnAddMacroText").disabled = !loaded;
-    $("btnRecordMacro").textContent = recording ? "Stop recording" : "Record";
-    $("macroCapture").hidden = !recording;
+    $("btnRecordMacro").textContent = recorder ? "Stop recording" : "Record";
+    $("macroCapture").hidden = !recorder;
+    $("macroStorage").textContent = loaded
+      ? `${actions.length} action${actions.length === 1 ? "" : "s"} · ${
+        bytes.toLocaleString()
+      } / ${MACRO_STORAGE_BYTES.toLocaleString()} bytes`
+      : "Not loaded";
+    $("macroStorage").classList.toggle("is-error", overBudget);
+    // syncMacros runs on every chrome update; rebuild the list only when the
+    // actions changed.
+    const stamp = loaded ? `${selectedMacro()}:${JSON.stringify(actions)}` : "";
+    if (stamp === macroListStamp) return;
+    macroListStamp = stamp;
     const list = $("macroActions");
     list.innerHTML = "";
     actions.forEach((action, index) => {
@@ -143,13 +190,14 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
       list.append(row);
     });
     $("macroEmpty").hidden = actions.length > 0;
-    $("macroStorage").textContent = loaded
-      ? `${actions.length} action${actions.length === 1 ? "" : "s"}`
-      : "Not loaded";
   }
 
   function sync() {
     if (socd && socdProfile !== state.profile) {
+      socd = null;
+      setStatus("Profile changed — load its onboard SOCD settings");
+    } else if (socd && JSON.stringify(state.socd) !== socdSource) {
+      // An import or reset replaced this profile's SOCD settings.
       socd = null;
       setStatus("Profile changed — load its onboard SOCD settings");
     }
@@ -178,6 +226,8 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
       keymaps = await kb.readKeymap();
       socd = await kb.readSocd(state.profile);
       socdProfile = state.profile;
+      model?.setSocd(socd);
+      socdSource = JSON.stringify(state.socd);
       setStatus("Onboard controls loaded", "ok");
     });
     sync();
@@ -206,35 +256,38 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     slot.bottomOut = $("socdBottomOut").checked;
   }
 
-  function stopRecording() {
-    recording = false;
-    lastRecordedAt = 0;
+  function startRecording() {
+    recorder = createMacroRecorder(macros[selectedMacro()]);
     syncMacros();
-    $("btnRecordMacro").focus();
+    $("macroCapture").focus();
+  }
+
+  function stopRecording({ focus = true } = {}) {
+    recorder?.finish();
+    recorder = null;
+    syncMacros();
+    if (focus) $("btnRecordMacro").focus();
   }
 
   function recordKey(event) {
-    if (!recording || event.repeat) return;
-    if (!$("macroCapture").checkVisibility()) {
+    if (!recorder) return;
+    // checkVisibility() needs macOS 14.4; offsetParent is null for anything
+    // hidden, including content of a closed <details> or a hidden panel.
+    if ($("macroCapture").offsetParent === null) {
       stopRecording();
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    if (event.code === "Escape") {
+    if (event.repeat) return;
+    if (event.type === "keydown" && event.code === "Escape") {
       stopRecording();
       return;
     }
     const keycode = EVENT_CODE_TO_HID[event.code];
     if (!keycode) return;
-    const now = performance.now();
-    const actions = macros[selectedMacro()];
-    if (lastRecordedAt) {
-      const duration = Math.round(now - lastRecordedAt);
-      if (duration >= 30) actions.push({ type: "delay", duration });
-    }
-    actions.push({ type: "tap", keycode });
-    lastRecordedAt = now;
+    if (event.type === "keydown") recorder.down(keycode, { command: event.metaKey });
+    else recorder.up(keycode);
     syncMacros();
   }
 
@@ -261,9 +314,9 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     const value = Number($("remapAssignment").value);
     gate.run("Key remap", async () => {
       await kb.writeKeymapKey(layer, key, value);
-      const verified = await kb.readKeymap();
-      if (verified[layer][key] !== value) throw new Error("Remap verification failed");
-      keymaps = verified;
+      const verified = await kb.readKeymapLayer(layer);
+      if (verified[key] !== value) throw new Error("Remap verification failed");
+      keymaps[layer] = verified;
       setStatus("Key mapping saved and verified", "ok");
       toast("Key mapping saved", "ok");
     }).catch((error) => toast(error?.message || String(error), "error"))
@@ -286,22 +339,23 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
       if (!same(expected, verified)) throw new Error("SOCD verification failed");
       socd = verified;
       socdProfile = state.profile;
+      model?.setSocd(verified);
+      socdSource = JSON.stringify(state.socd);
       setStatus("SOCD saved and verified", "ok");
       toast("SOCD saved", "ok");
     }).catch((error) => toast(error?.message || String(error), "error"))
       .finally(sync);
   });
   $("macroSlot").addEventListener("change", () => {
-    if (recording) stopRecording();
+    if (recorder) stopRecording({ focus: false });
     syncMacros();
   });
   $("btnRecordMacro").addEventListener("click", () => {
-    recording = !recording;
-    lastRecordedAt = 0;
-    syncMacros();
-    if (recording) $("macroCapture").focus();
+    if (recorder) stopRecording();
+    else startRecording();
   });
   $("btnClearMacro").addEventListener("click", () => {
+    if (recorder) stopRecording({ focus: false });
     macros[selectedMacro()] = [];
     syncMacros();
   });
@@ -320,8 +374,9 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
     syncMacros();
   });
   $("btnSaveMacro").addEventListener("click", () => {
-    const expected = decodeMacros(encodeMacros(structuredClone(macros)));
+    if (recorder) stopRecording({ focus: false });
     gate.run("Macro save", async () => {
+      const expected = decodeMacros(encodeMacros(structuredClone(macros)));
       await kb.writeMacros(expected);
       const verified = await kb.readMacros();
       if (!same(expected, verified)) throw new Error("Macro verification failed");
@@ -332,9 +387,10 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
       .finally(sync);
   });
   document.addEventListener("keydown", recordKey, true);
+  document.addEventListener("keyup", recordKey, true);
   const macroSection = $("macroCapture").closest("details");
   macroSection?.addEventListener("toggle", () => {
-    if (!macroSection.open && recording) stopRecording();
+    if (!macroSection.open && recorder) stopRecording({ focus: false });
   });
 
   function connectionChanged() {
@@ -343,7 +399,7 @@ export function createAdvancedUi({ kb, state, gate, toast, onChromeChange }) {
       socd = null;
       socdProfile = null;
       macros = null;
-      recording = false;
+      recorder = null;
       setStatus("");
     }
     sync();

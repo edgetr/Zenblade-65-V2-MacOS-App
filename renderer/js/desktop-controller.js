@@ -55,6 +55,13 @@ export function createDesktopController({
       profile: state.profile,
       lightingOn: state.lighting.isOn,
       automationEnabled: state.automation.enabled,
+      profileNames: [0, 1, 2].map((index) => model.labelFor(index)),
+      meeting: state.system.audio.inputUid || state.system.audio.outputUid
+        ? {
+          inputUid: state.system.audio.inputUid || "",
+          outputUid: state.system.audio.outputUid || "",
+        }
+        : null,
     };
     const stamp = JSON.stringify(snapshot);
     if (stamp === lastReport) return;

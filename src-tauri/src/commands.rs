@@ -12,7 +12,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::audio::{AudioAction, AudioBridge};
 use crate::desktop::{self, ApplicationInfo, APP_BUNDLE_ID};
-use crate::{menu, observers, AppState, DesktopState};
+use crate::{login_item, menu, observers, AppState, DesktopState};
 
 const MAX_PROFILE_FILE: u64 = 1024 * 1024;
 
@@ -78,6 +78,8 @@ pub fn app_set_desktop_state(webview: Webview, app: AppHandle, next: Value) -> R
             profile: desktop::profile_index(next.get("profile").unwrap_or(&Value::Null)),
             lighting_on: next.get("lightingOn") != Some(&Value::Bool(false)),
             automation_enabled: next.get("automationEnabled") == Some(&Value::Bool(true)),
+            profile_names: profile_names(next.get("profileNames")),
+            meeting: meeting_devices(next.get("meeting")),
         };
         (was, desktop_state.automation_enabled)
     };
@@ -108,6 +110,39 @@ pub async fn app_get_system_context(
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
     Ok(json!({ "audio": audio, "processes": processes, "observedAt": observed_at }))
+}
+
+fn profile_names(value: Option<&Value>) -> Vec<String> {
+    (0..3)
+        .map(|index| {
+            value
+                .and_then(|names| names.get(index))
+                .and_then(Value::as_str)
+                .map(|name| name.chars().filter(|c| !c.is_control()).take(32).collect::<String>())
+                .map(|name| name.trim().to_string())
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| format!("Profile {}", index + 1))
+        })
+        .collect()
+}
+
+fn meeting_devices(value: Option<&Value>) -> Option<(String, String)> {
+    let value = value?;
+    let input = text(value, "inputUid");
+    let output = text(value, "outputUid");
+    (!input.is_empty() || !output.is_empty()).then_some((input, output))
+}
+
+/// Runs an audio action off the main thread and reports the result to the
+/// renderer, like a System key control would.
+pub fn run_audio_action(app: &AppHandle, action: AudioAction) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        match app.state::<AudioBridge>().perform(&action) {
+            Ok(audio) => crate::send_to_renderer(&app, "app:systemContext", json!({ "audio": audio })),
+            Err(message) => crate::send_to_renderer(&app, "app:systemActionError", message),
+        }
+    });
 }
 
 #[derive(Serialize)]
@@ -152,17 +187,9 @@ pub async fn app_configure_system_shortcuts(
             output_uid: text(value, "outputUid"),
         };
         let result = shortcuts.on_shortcut(accelerator.as_str(), move |app, _shortcut, event| {
-            if event.state != ShortcutState::Pressed {
-                return;
+            if event.state == ShortcutState::Pressed {
+                run_audio_action(app, action.clone());
             }
-            let app = app.clone();
-            let action = action.clone();
-            tauri::async_runtime::spawn_blocking(move || {
-                match app.state::<AudioBridge>().perform(&action) {
-                    Ok(audio) => crate::send_to_renderer(&app, "app:systemContext", json!({ "audio": audio })),
-                    Err(message) => crate::send_to_renderer(&app, "app:systemActionError", message),
-                }
-            });
         });
         match result {
             Ok(()) => registered.push(accelerator),
@@ -171,6 +198,27 @@ pub async fn app_configure_system_shortcuts(
     }
     state.shortcuts.lock().unwrap_or_else(|e| e.into_inner()).clone_from(&registered);
     Ok(ShortcutResult { registered, failures })
+}
+
+#[tauri::command]
+pub fn app_running_applications(webview: Webview) -> Result<Vec<ApplicationInfo>, String> {
+    trusted(&webview)?;
+    // Synchronous commands run on the main thread, where AppKit expects it.
+    Ok(desktop::running_applications())
+}
+
+#[tauri::command]
+pub fn app_get_login_item(webview: Webview) -> Result<bool, String> {
+    trusted(&webview)?;
+    Ok(login_item::enabled())
+}
+
+#[tauri::command]
+pub fn app_set_login_item(webview: Webview, app: AppHandle, enabled: bool) -> Result<bool, String> {
+    trusted(&webview)?;
+    let result = login_item::set(enabled)?;
+    crate::menu::refresh_tray(&app);
+    Ok(result)
 }
 
 #[tauri::command]

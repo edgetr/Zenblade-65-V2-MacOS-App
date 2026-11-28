@@ -116,6 +116,15 @@
 
             <div class="keyboard-layout">
               <div class="card board-card">
+                <div class="board-toolbar">
+                  <p class="board-toolbar__hint">Click a key to tune it. Shift-click to select several.</p>
+                  <div class="btn-row" role="group" aria-label="Select keys">
+                    <button type="button" class="btn btn--ghost btn--sm" data-key-group="wasd">WASD</button>
+                    <button type="button" class="btn btn--ghost btn--sm" data-key-group="arrows">Arrows</button>
+                    <button type="button" class="btn btn--ghost btn--sm" data-key-group="modifiers">Modifiers</button>
+                    <button type="button" class="btn btn--ghost btn--sm" id="btnClearOverrides">No overrides</button>
+                  </div>
+                </div>
                 <div class="board-wrap board-wrap--premium">
                   <div class="board board--interactive" id="keyboardBoard" aria-label="Keyboard"></div>
                 </div>
@@ -128,13 +137,32 @@
                     <h3 class="card__title" id="keyEditorTitle">Key</h3>
                     <button type="button" class="btn btn--ghost btn--sm" id="btnResetKey">Use global feel</button>
                   </div>
+                  <p class="key-editor__keys" id="keyEditorKeys"></p>
                   <div class="field">
-                    <label for="keyPress">Press <output id="keyOutPress">15</output></label>
+                    <label for="keyPress">Press <output id="keyOutPress">1.5 mm</output></label>
                     <input type="range" id="keyPress" title="Distance before this key registers a press." aria-description="Distance before this key registers a press." aria-label="Press point" min="1" max="40" value="15" />
                   </div>
                   <div class="field">
-                    <label for="keyRelease">Release <output id="keyOutRelease">15</output></label>
+                    <label for="keyRelease">Release <output id="keyOutRelease">1.5 mm</output></label>
                     <input type="range" id="keyRelease" title="Return distance before this key releases." aria-description="Return distance before this key releases." aria-label="Release point" min="1" max="40" value="15" />
+                  </div>
+                  <div class="key-editor__rt">
+                    <label class="select-field">
+                      <span>Rapid Trigger</span>
+                      <select class="select-input" id="keyRT">
+                        <option value="">Use Feel</option>
+                        <option value="on">On</option>
+                        <option value="off">Off</option>
+                      </select>
+                    </label>
+                    <label class="select-field">
+                      <span>Continuous</span>
+                      <select class="select-input" id="keyCRT" title="Stay in Rapid Trigger until the key is fully released.">
+                        <option value="">Use Feel</option>
+                        <option value="on">On</option>
+                        <option value="off">Off</option>
+                      </select>
+                    </label>
                   </div>
                   <div class="btn-row">
                     <button type="button" class="btn btn--primary" id="btnApplyKey">Save key</button>
@@ -185,8 +213,9 @@
                   <div class="color-row" id="fieldColor">
                     <label for="lightColorPicker">Base color</label>
                     <input type="color" id="lightColorPicker" value="#ff0000" aria-describedby="simpleColorReadout" />
-                    <span class="mono" id="simpleColorReadout" aria-live="polite">#FF0000</span>
+                    <input type="text" class="text-input mono color-hex" id="simpleColorReadout" value="#FF0000" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Base color hex" />
                   </div>
+                  <div class="color-presets" id="colorPresets" role="group" aria-label="Preset colors"></div>
                   <div class="color-swatches" id="colorSwatches" hidden aria-label="Effect colors"></div>
                 </div>
                 <p class="color-unavailable" id="colorUnavailable" hidden></p>
@@ -207,20 +236,24 @@
             <div class="grid-3">
               <div class="card">
                 <div class="field field--solo">
-                  <label for="actPress">Press <output id="outPress">15</output></label>
+                  <label for="actPress">Press <output id="outPress">1.5 mm</output></label>
                   <input type="range" id="actPress" title="Press point for keys without an override." aria-description="Press point for keys without an override." aria-label="Global press point" min="1" max="40" value="15" />
                 </div>
               </div>
               <div class="card">
                 <div class="field field--solo">
-                  <label for="actRelease">Release <output id="outRelease">15</output></label>
+                  <label for="actRelease">Release <output id="outRelease">1.5 mm</output></label>
                   <input type="range" id="actRelease" title="Release point for keys without an override." aria-description="Release point for keys without an override." aria-label="Global release point" min="1" max="40" value="15" />
                 </div>
               </div>
-              <div class="card card--center">
+              <div class="card card--center rt-card">
                 <label class="switch">
                   <input type="checkbox" id="actRT" title="Retrigger keys when their direction changes." aria-description="Retrigger keys when their direction changes." checked />
                   <span>Rapid Trigger</span>
+                </label>
+                <label class="switch">
+                  <input type="checkbox" id="actCRT" title="Stay in Rapid Trigger until the key is fully released." aria-description="Stay in Rapid Trigger until the key is fully released." />
+                  <span>Continuous</span>
                 </label>
               </div>
             </div>
@@ -243,6 +276,12 @@
                 spellcheck="true"
                 placeholder="" aria-label="Typing test"
               ></textarea>
+              <dl class="typing-stats" aria-live="polite">
+                <div class="typing-stat"><dt>WPM</dt><dd id="typingWpm">—</dd></div>
+                <div class="typing-stat"><dt>Avg hold</dt><dd id="typingHold">—</dd></div>
+                <div class="typing-stat" title="Re-presses within 25 ms of a release — usually a key bouncing."><dt>Double presses</dt><dd id="typingChatter">0</dd></div>
+                <div class="typing-stat"><dt>Keys</dt><dd id="typingKeys">0</dd></div>
+              </dl>
             </div>
           </section>
 
@@ -256,21 +295,28 @@
             </div>
             <div class="card-toolbar profiles-toolbar">
               <div class="btn-row profile-actions">
-                <button type="button" class="btn btn--ghost btn--icon" id="btnImportProfile" aria-label="Import profile" title="Import profile">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v3h14v-3" /></svg>
-                </button>
-                <button type="button" class="btn btn--ghost btn--icon" id="btnExportProfile" aria-label="Export profile" title="Export profile">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0 4 4m-4-4-4 4M5 17v3h14v-3" /></svg>
-                </button>
+                <button type="button" class="btn btn--ghost btn--sm" id="btnImportProfile" title="Replace the selected profile with a .zenbladeprofile file">Import…</button>
+                <button type="button" class="btn btn--ghost btn--sm" id="btnExportProfile" title="Save the selected profile to a file">Export…</button>
                 <button type="button" class="btn btn--ghost btn--icon" id="btnRetrySync" aria-label="Re-apply profile" title="Re-apply profile" hidden>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8a8 8 0 1 0 1 6M19 4v4h-4" /></svg>
                 </button>
               </div>
             </div>
-            <div class="profile-grid" id="profileGrid">
-              <button class="profile-card" data-profile="0" aria-label="Profile 1" aria-pressed="true"><strong>P1</strong></button>
-              <button class="profile-card" data-profile="1" aria-label="Profile 2" aria-pressed="false"><strong>P2</strong></button>
-              <button class="profile-card" data-profile="2" aria-label="Profile 3" aria-pressed="false"><strong>P3</strong></button>
+            <div class="profile-grid" id="profileGrid" role="group" aria-label="Onboard profiles"></div>
+
+            <div class="card profile-editor">
+              <label class="text-field profile-name-field">
+                <span>Name</span>
+                <input type="text" class="text-input" id="profileName" maxlength="32" autocomplete="off" spellcheck="false" />
+              </label>
+              <div class="profile-editor__actions">
+                <label class="select-field">
+                  <span>Copy settings to</span>
+                  <select class="select-input" id="profileCopyTarget"></select>
+                </label>
+                <button type="button" class="btn btn--ghost" id="btnCopyProfile">Copy</button>
+                <button type="button" class="btn btn--ghost" id="btnResetProfile" title="Return lighting, feel, key overrides and System controls to defaults">Reset</button>
+              </div>
             </div>
 
             <div class="card automation-card">
@@ -301,9 +347,16 @@
 
               <div class="automation-rules-head">
                 <strong>Apps</strong>
-                <button type="button" class="btn btn--primary btn--icon" id="btnAddApplications" aria-label="Add applications" title="Add applications">
+                <button type="button" class="btn btn--primary btn--icon" id="btnAddApplications" aria-label="Add applications" title="Add applications" aria-expanded="false" aria-controls="appPicker">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                 </button>
+              </div>
+              <div class="app-picker" id="appPicker" hidden>
+                <p class="app-picker__title">Running apps</p>
+                <div class="app-picker__list" id="appPickerList"></div>
+                <div class="app-picker__footer">
+                  <button type="button" class="btn btn--ghost btn--sm" id="btnBrowseApplications">Choose from Applications…</button>
+                </div>
               </div>
               <div class="automation-rules" id="automationRules"></div>
               <p class="automation-empty" id="automationEmpty"></p>
@@ -331,6 +384,9 @@
                   <div class="disclose__body">
                     <div class="card-toolbar">
                       <button type="button" class="btn btn--primary btn--sm" id="btnSaveRemap">Save mapping</button>
+                    </div>
+                    <div class="board-wrap board-wrap--bare picker-wrap">
+                      <div class="board board--interactive board--picker" id="remapBoard" aria-label="Choose the key to remap"></div>
                     </div>
                     <div class="advanced-fields">
                       <label class="select-field">
@@ -538,12 +594,24 @@
                       <button type="button" class="status-preset" id="btnAddIndicator">Custom</button>
                     </div>
                     <div class="board-wrap system-board-wrap">
-                      <div class="board system-board" id="indicatorBoard" aria-label="Live status map"></div>
+                      <div class="board system-board" id="indicatorBoard" role="group" aria-label="Live status map" title="Click a key to add or edit its indicator"></div>
                     </div>
                     <div class="system-list system-list--rules" id="indicatorRuleList"></div>
                     <p class="system-empty" id="indicatorEmpty"></p>
                   </div>
                 </details>
+              </article>
+              <article class="card system-card system-card--app">
+                <div class="card-toolbar">
+                  <div>
+                    <h3 class="card__title">Open at login</h3>
+                    <p class="system-card__note" id="loginItemNote">Starts quietly in the menu bar so profiles and key controls are ready.</p>
+                  </div>
+                  <label class="switch switch--compact">
+                    <input type="checkbox" id="loginItemEnabled" />
+                    <span class="sr-only">Open at login</span>
+                  </label>
+                </div>
               </article>
             </div>
 
@@ -644,7 +712,6 @@
     </div>
 
     <div class="toast" id="toast" role="status"></div>
-    <div class="help-pop" id="helpPop" hidden role="tooltip"></div>
     <script src="js/native-shell.js"></script>
     <script type="module" src="js/app.js"></script>
   </body>

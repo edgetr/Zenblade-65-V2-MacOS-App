@@ -5,6 +5,7 @@ mod desktop;
 mod e2e;
 mod hid;
 mod hotplug;
+mod login_item;
 mod menu;
 mod migrate;
 mod observers;
@@ -33,11 +34,22 @@ pub struct DesktopState {
     pub profile: usize,
     pub lighting_on: bool,
     pub automation_enabled: bool,
+    /// Display names for the three onboard profiles.
+    pub profile_names: Vec<String>,
+    /// The active profile's Meeting setup devices, when any are chosen.
+    pub meeting: Option<(String, String)>,
 }
 
 impl Default for DesktopState {
     fn default() -> Self {
-        Self { connected: false, profile: 0, lighting_on: true, automation_enabled: false }
+        Self {
+            connected: false,
+            profile: 0,
+            lighting_on: true,
+            automation_enabled: false,
+            profile_names: (1..=3).map(|n| format!("Profile {n}")).collect(),
+            meeting: None,
+        }
     }
 }
 
@@ -130,8 +142,9 @@ fn create_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
             }
             // Like Electron's `once("ready-to-show")`: a reload while the
             // window is hidden in the menu bar must not pop it open.
+            // A login launch (`--hidden`) starts quietly in the menu bar.
             static SHOWN: AtomicBool = AtomicBool::new(false);
-            if !SHOWN.swap(true, Ordering::SeqCst) {
+            if !SHOWN.swap(true, Ordering::SeqCst) && !login_item::launched_hidden() {
                 let _ = window.show();
             }
             if seeded_legacy {
@@ -189,6 +202,9 @@ pub fn run() {
             commands::app_choose_applications,
             commands::app_export_profile,
             commands::app_import_profile,
+            commands::app_running_applications,
+            commands::app_get_login_item,
+            commands::app_set_login_item,
             hid::hid_get_devices,
             hid::hid_open,
             hid::hid_close,
@@ -202,6 +218,7 @@ pub fn run() {
             app.manage(HidState::new().map_err(|e| format!("HID unavailable: {e}"))?);
             menu::install_app_menu(&handle)?;
             create_window(&handle)?;
+            login_item::refresh();
             menu::install_tray(&handle)?;
             observers::install(&handle);
             hid::start_monitor(handle.clone());

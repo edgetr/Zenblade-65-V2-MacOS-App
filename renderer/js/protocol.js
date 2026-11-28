@@ -61,6 +61,30 @@ export const colorFromWire = (hue, saturation) => ({
   saturation: pctFromWire(saturation),
 });
 
+// The firmware stores lighting levels a few 8-bit steps below what it is sent,
+// so a plain write/read round trip loses about 1% each time. Keep the user's
+// value when the keyboard reports something within that rounding window.
+const LIGHTING_DRIFT_STEPS = 3;
+export function reconcileLighting(read, stored) {
+  if (!stored) return read;
+  const near = (a, b) => Math.abs(a - b) <= LIGHTING_DRIFT_STEPS;
+  const nearHue = (a, b) => {
+    const delta = Math.abs(a - b) % 256;
+    return Math.min(delta, 256 - delta) <= LIGHTING_DRIFT_STEPS;
+  };
+  const result = { ...read };
+  for (const key of ["brightness", "speed", "saturation"]) {
+    if (Number.isFinite(stored[key]) && near(pctToWire(read[key]), pctToWire(stored[key]))) {
+      result[key] = stored[key];
+    }
+  }
+  if (
+    Number.isFinite(stored.hue) &&
+    nearHue(colorToWire(read.hue, 0).hue, colorToWire(stored.hue, 0).hue)
+  ) result.hue = stored.hue;
+  return result;
+}
+
 // Single source of truth for digital previews/readouts: the 8-bit values the
 // firmware actually receives for hue, saturation, brightness, and speed.
 // This is wire quantization, not physical LED/monitor colorimetric calibration.
@@ -164,7 +188,9 @@ export function normalizeSocdConfig(value = {}) {
   return { enabled: value.enabled === true, slots };
 }
 
-export function encodeMacros(macros = []) {
+export const MACRO_STORAGE_BYTES = 4000;
+
+function macroBytes(macros = []) {
   const output = [];
   for (let slot = 0; slot < MACRO_COUNT; slot++) {
     for (const action of Array.isArray(macros[slot]) ? macros[slot] : []) {
@@ -185,8 +211,43 @@ export function encodeMacros(macros = []) {
     }
     output.push(0);
   }
-  if (output.length > 4000) throw new Error("Macros exceed onboard storage");
+  return output;
+}
+
+export const macroByteLength = (macros) => macroBytes(macros).length;
+
+export function encodeMacros(macros = []) {
+  const output = macroBytes(macros);
+  if (output.length > MACRO_STORAGE_BYTES) {
+    throw new Error("Macros exceed onboard storage");
+  }
   return new Uint8Array(output);
+}
+
+// True once `bytes` holds all 16 macro slots, walking actions the same way
+// decodeMacros does so a keycode of 0 is never mistaken for a terminator.
+export function macroSlotsComplete(bytes = []) {
+  let slot = 0;
+  let index = 0;
+  while (index < bytes.length && slot < MACRO_COUNT) {
+    const value = bytes[index++];
+    if (value === 0) {
+      slot++;
+    } else if (value === 1) {
+      // An action cut off at a chunk boundary needs the next chunk.
+      if (index >= bytes.length) return false;
+      const type = bytes[index++];
+      if (type >= 1 && type <= 3) index++;
+      else if (type === 4) {
+        while (index < bytes.length && bytes[index] !== 124) index++;
+        if (index >= bytes.length) return false;
+        index++;
+      } else return true;
+    } else {
+      while (index < bytes.length && bytes[index] > 4) index++;
+    }
+  }
+  return slot >= MACRO_COUNT;
 }
 
 export function decodeMacros(bytes = []) {
@@ -313,18 +374,30 @@ export class ZenbladeDevice {
       event.data.byteOffset,
       event.data.byteLength,
     );
+    const item = this._queue[0];
     if (bytes[0] === 255) {
-      this._emit("error", "Device error packet");
+      // An error reply answers the command in flight; fail it now instead of
+      // stalling every queued command until the timeout.
+      if (item && this._busy) {
+        this._settle(item);
+        item.reject(Error("Keyboard rejected the command"));
+        this._pump();
+      } else {
+        this._emit("error", "Device error packet");
+      }
       return;
     }
-    const item = this._queue[0];
     if (!item) return;
     if (!responseMatchesCommand(bytes, item.id, event.data.byteLength)) return;
-    clearTimeout(item.timer);
-    this._queue.shift();
-    this._busy = false;
+    this._settle(item);
     item.resolve(bytes.slice(Math.min(item.id.length, bytes.length)));
     this._pump();
+  }
+  _settle(item) {
+    clearTimeout(item.timer);
+    const index = this._queue.indexOf(item);
+    if (index >= 0) this._queue.splice(index, 1);
+    this._busy = false;
   }
   execute(command, idLength) {
     if (!this.connected) return Promise.reject(Error("Not connected"));
@@ -522,6 +595,8 @@ export class ZenbladeDevice {
         5,
       );
       bytes.push(...result.slice(0, 60));
+      // Stop once every slot has ended instead of reading all 4 KB.
+      if (macroSlotsComplete(bytes)) break;
     }
     return decodeMacros(bytes);
   }
@@ -547,14 +622,23 @@ export class ZenbladeDevice {
       releaseValues = [],
       rapidTrigger = true,
       continuousRapidTrigger = false,
+      rapidTriggerValues = null,
+      continuousValues = null,
     },
   ) {
     const p = Math.max(0, Math.min(2, profileIndex | 0)),
-      all = (v) => Array(KEY_COUNT).fill(v);
-    await this._matrix([33, 9, p], all(rapidTrigger ? 1 : 0));
+      perKey = (values, fallback) =>
+        Array.from({ length: KEY_COUNT }, (_, index) =>
+          typeof values?.[index] === "boolean" ? values[index] : fallback
+        );
+    const rapid = perKey(rapidTriggerValues, rapidTrigger);
+    // Continuous mode only applies on keys that use Rapid Trigger.
+    const continuous = perKey(continuousValues, continuousRapidTrigger)
+      .map((on, index) => on && rapid[index]);
+    await this._matrix([33, 9, p], rapid.map((on) => on ? 1 : 0));
     await this._matrix([33, 7, p], pressValues);
     await this._matrix([33, 8, p], releaseValues);
-    await this._matrix([33, 16, p], all(4 | (continuousRapidTrigger ? 1 : 0)));
+    await this._matrix([33, 16, p], continuous.map((on) => 4 | (on ? 1 : 0)));
     await this.execute([33, 243], 2);
     return true;
   }

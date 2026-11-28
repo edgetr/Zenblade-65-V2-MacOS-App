@@ -1,8 +1,4 @@
-import { CODE_TO_MATRIX_INDEX, ROWS } from "./layout.js";
-
-const labels = Object.fromEntries(
-  ROWS.flat().map((key) => [key.code, key.label || key.code]),
-);
+import { CODE_TO_MATRIX_INDEX, keyName } from "./layout.js";
 
 export const PHYSICAL_KEYS = Object.freeze(
   Object.entries(CODE_TO_MATRIX_INDEX)
@@ -10,7 +6,7 @@ export const PHYSICAL_KEYS = Object.freeze(
     .map(([code, index]) => ({
       code,
       index,
-      label: labels[code] || code,
+      label: keyName(code),
     })),
 );
 
@@ -93,6 +89,35 @@ export const HID_ASSIGNMENTS = Object.freeze([
   })),
 ]);
 
+// Sections for the long assignment list.
+export function hidGroup(value) {
+  if (value === 1) return "Basic";
+  if (value >= 4 && value <= 29) return "Letters";
+  if (value >= 30 && value <= 39) return "Numbers";
+  if (value >= 40 && value <= 57) return "Symbols and editing";
+  if ((value >= 58 && value <= 69) || (value >= 104 && value <= 115)) {
+    return "Function keys";
+  }
+  if (value >= 73 && value <= 82) return "Navigation";
+  if (value >= 168 && value <= 188) return "Media";
+  if (value >= 224 && value <= 231) return "Modifiers";
+  if (value >= 30464 && value < 30480) return "Macros";
+  return "Keyboard";
+}
+
+export const HID_GROUP_ORDER = Object.freeze([
+  "Basic",
+  "Letters",
+  "Numbers",
+  "Symbols and editing",
+  "Function keys",
+  "Navigation",
+  "Modifiers",
+  "Media",
+  "Keyboard",
+  "Macros",
+]);
+
 export const HID_BY_VALUE = new Map(
   HID_ASSIGNMENTS.map((item) => [item.value, item]),
 );
@@ -120,6 +145,15 @@ export const EVENT_CODE_TO_HID = Object.freeze({
   Period: 55,
   Slash: 56,
   CapsLock: 57,
+  ...Object.fromEntries(
+    Array.from({ length: 12 }, (_, index) => [`F${index + 1}`, 58 + index]),
+  ),
+  Insert: 73,
+  Home: 74,
+  PageUp: 75,
+  Delete: 76,
+  End: 77,
+  PageDown: 78,
   ArrowRight: 79,
   ArrowLeft: 80,
   ArrowDown: 81,
@@ -133,6 +167,8 @@ export const EVENT_CODE_TO_HID = Object.freeze({
   AltRight: 230,
   MetaRight: 231,
 });
+
+export const isModifierHid = (value) => value >= 224 && value <= 231;
 
 export const LAYER_NAMES = Object.freeze([
   "Base",

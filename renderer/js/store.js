@@ -1,4 +1,8 @@
-import { normalizeLighting, PROFILE_COUNT } from "./protocol.js";
+import {
+  normalizeLighting,
+  normalizeSocdConfig,
+  PROFILE_COUNT,
+} from "./protocol.js";
 import { clamp } from "./color.js";
 import {
   defaultSystemProfile,
@@ -21,14 +25,25 @@ export const defaultActuation = () => ({
   press: 15,
   release: 15,
   rapidTrigger: true,
+  continuousRapidTrigger: false,
 });
 
+export const PROFILE_NAME_MAX = 32;
+export const normalizeProfileName = (value) =>
+  String(value ?? "").replace(/\s+/g, " ").trim().slice(0, PROFILE_NAME_MAX);
+export const profileLabel = (profile, index) =>
+  normalizeProfileName(profile?.name) || `Profile ${index + 1}`;
+
 export const defaultProfile = () => ({
+  name: "",
   lighting: defaultLighting(),
   actuation: defaultActuation(),
   keyOverrides: {},
   appNotes: {},
   system: defaultSystemProfile(),
+  // Last SOCD settings read from or written to this onboard profile, so they
+  // travel with exported profiles. null until Advanced loads them.
+  socd: null,
 });
 
 export const defaultAutomation = () => ({
@@ -56,6 +71,7 @@ export function normalizeActuation(partial = {}, fallback = {}) {
     press: fallback.press ?? 15,
     release: fallback.release ?? 15,
     rapidTrigger: fallback.rapidTrigger !== false,
+    continuousRapidTrigger: fallback.continuousRapidTrigger === true,
   };
   return {
     press: clamp(number(partial.press, base.press), 1, 40),
@@ -63,7 +79,23 @@ export function normalizeActuation(partial = {}, fallback = {}) {
     rapidTrigger: typeof partial.rapidTrigger === "boolean"
       ? partial.rapidTrigger
       : base.rapidTrigger,
+    continuousRapidTrigger: typeof partial.continuousRapidTrigger === "boolean"
+      ? partial.continuousRapidTrigger
+      : base.continuousRapidTrigger,
   };
+}
+
+// Per-key overrides always carry press/release; Rapid Trigger settings are
+// optional and fall back to the profile's global Feel when absent.
+export function normalizeKeyOverride(value = {}) {
+  const override = {
+    press: clamp(number(value.press, 15), 1, 40),
+    release: clamp(number(value.release, 15), 1, 40),
+  };
+  for (const key of ["rapidTrigger", "continuousRapidTrigger"]) {
+    if (typeof value[key] === "boolean") override[key] = value[key];
+  }
+  return override;
 }
 
 export function normalizeAutomation(raw = {}) {
@@ -99,6 +131,10 @@ export function normalizeStore(raw, validCodes = {}) {
     const src = raw.profiles?.[i];
     if (!src || typeof src !== "object") continue;
     const p = store.profiles[i];
+    p.name = normalizeProfileName(src.name);
+    p.socd = src.socd && typeof src.socd === "object"
+      ? normalizeSocdConfig(src.socd)
+      : null;
     const l = src.lighting || {};
     const a = src.actuation || {};
     p.lighting = normalizeLighting(l, defaultLighting());
@@ -106,10 +142,7 @@ export function normalizeStore(raw, validCodes = {}) {
     p.system = normalizeSystemProfile(src.system);
     for (const [code, ov] of Object.entries(src.keyOverrides || {})) {
       if (Object.hasOwn(validCodes, code) && ov && typeof ov === "object") {
-        p.keyOverrides[code] = {
-          press: clamp(number(ov.press, 15), 1, 40),
-          release: clamp(number(ov.release, 15), 1, 40),
-        };
+        p.keyOverrides[code] = normalizeKeyOverride(ov);
         if (ov.macro || ov.combo) {
           p.appNotes[code] = {
             macro: String(ov.macro || ""),

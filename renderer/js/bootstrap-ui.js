@@ -43,7 +43,10 @@ export function installBootstrapUi({
       item.setAttribute("aria-hidden", String(!active));
     });
     document.querySelector(".main__scroll")?.scrollTo({ top: 0 });
-    document.title = `${panel[0].toUpperCase()}${panel.slice(1)} — Zenblade`;
+    document.dispatchEvent(new CustomEvent("zen:panel", { detail: panel }));
+    const label = document.querySelector(`.nav__btn[data-panel="${panel}"]`)
+      ?.textContent.trim() || `${panel[0].toUpperCase()}${panel.slice(1)}`;
+    document.title = `${label} — Zenblade`;
   };
 
   $("btnRefresh").addEventListener(
@@ -98,11 +101,16 @@ export function installBootstrapUi({
     board.paint();
     lighting.visibility();
   };
-  window.zenShell?.onNavigate?.((panel) => navigate(panel));
+  const editorOpen = () =>
+    document.querySelector(".system-editor:not([hidden])") !== null;
+  window.zenShell?.onNavigate?.((panel) => {
+    if (!editorOpen()) navigate(panel);
+  });
   document.addEventListener("keydown", (event) => {
     const command = event.metaKey || event.ctrlKey;
     if (command && !event.altKey && !event.shiftKey && /^[1-6]$/.test(event.key)) {
       event.preventDefault();
+      if (editorOpen()) return;
       const panel = [
         "keyboard",
         "lighting",
@@ -118,7 +126,7 @@ export function installBootstrapUi({
       navigate(panel);
       return;
     }
-    if (command && event.key === "Enter") {
+    if (command && event.key === "Enter" && event.target?.id !== "typingTest") {
       const activePanel = document.querySelector(".panel.is-active")?.id;
       const apply = activePanel === "panel-lighting"
         ? $("btnApplyLighting")

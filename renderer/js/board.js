@@ -1,16 +1,19 @@
-import { ROWS } from "./layout.js";
+import { ROWS, keyName } from "./layout.js";
 import {
   keyDisplayColor,
   keyOverrideDisplayColor,
 } from "./preview.js";
 import { hexToRgb, rgbToCss } from "./color.js";
 import { $ } from "./dom.js";
+import { formatMm } from "./units.js";
 
 export function createBoard({ state, onSelect, onPaint } = {}) {
   let paintRaf = 0, scaleRaf = 0;
   const last = new WeakMap();
 
-  function render(root, interactive = false) {
+  // interactive: the tunable Keyboard board. clickable: focusable keys without
+  // feel badges (the status map, where clicking edits an indicator).
+  function render(root, interactive = false, clickable = interactive) {
     root.innerHTML = "";
     ROWS.forEach((row, rowIndex) => {
       const line = document.createElement("div");
@@ -28,9 +31,15 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
           cols: row.length,
           rows: ROWS.length,
         });
-        key.tabIndex = interactive && rowIndex === 0 && col === 0 ? 0 : -1;
-        if (!interactive) key.setAttribute("aria-hidden", "true");
-        else key.setAttribute("aria-label", item.code);
+        key.tabIndex = clickable && rowIndex === 0 && col === 0 ? 0 : -1;
+        if (!clickable) key.setAttribute("aria-hidden", "true");
+        else key.setAttribute("aria-label", keyName(item.code));
+        if (interactive) {
+          const badge = document.createElement("span");
+          badge.className = "key__badge";
+          badge.setAttribute("aria-hidden", "true");
+          key.append(badge);
+        }
         line.append(key);
       });
       root.append(line);
@@ -58,21 +67,43 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
     key.style.setProperty("--key-bot", lit ? css : "#1c2128");
   }
 
+  const overrideSummary = (value) => {
+    const parts = [
+      `Press ${formatMm(value.press)}`,
+      `release ${formatMm(value.release)}`,
+    ];
+    if (typeof value.rapidTrigger === "boolean") {
+      parts.push(`Rapid Trigger ${value.rapidTrigger ? "on" : "off"}`);
+    }
+    if (typeof value.continuousRapidTrigger === "boolean") {
+      parts.push(`continuous ${value.continuousRapidTrigger ? "on" : "off"}`);
+    }
+    return parts.join(" · ");
+  };
+
   function paintRoot(root) {
-    if (!root) return;
+    // Hidden panels are repainted when navigation shows them.
+    if (!root || root.closest(".panel")?.hidden) return;
     const L = state.lighting,
       solid = L.mode === 1 || L.mode === 0 || !L.isOn,
       lit = L.isOn && L.mode !== 0;
+    const selected = new Set(
+      state.selectedKeys?.length ? state.selectedKeys : [state.selectedKey],
+    );
     root.querySelectorAll(".key").forEach((key) => {
       const status = state.statusOverlay?.[key.dataset.code];
-      const override = !!state.keyOverrides[key.dataset.code];
+      const overrideValue = state.keyOverrides[key.dataset.code];
+      const override = !!overrideValue;
       key.classList.toggle("is-override", override);
+      const badge = key.querySelector(".key__badge");
+      if (badge) {
+        const text = override ? formatMm(overrideValue.press, { unit: false }) : "";
+        if (badge.textContent !== text) badge.textContent = text;
+      }
       key.classList.toggle("is-status", !!status);
       key.classList.toggle("is-activity", status?.activityIndex != null);
-      key.classList.toggle(
-        "is-selected",
-        state.selectedKey === key.dataset.code,
-      );
+      key.classList.toggle("is-selected", selected.has(key.dataset.code));
+      key.classList.toggle("is-multi", selected.size > 1);
       if (status?.activityIndex != null) {
         key.style.setProperty("--activity-index", status.activityIndex);
         key.style.setProperty("--activity-count", status.activityCount);
@@ -95,7 +126,7 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
           b: Math.round(statusRgb.b * intensity),
         }
         : baseRgb;
-      key.title = status?.label || "";
+      key.title = status?.label || (override ? overrideSummary(overrideValue) : "");
       applyPaint(key, rgb, !!statusRgb || lit || override);
     });
   }
@@ -141,17 +172,17 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
   }
 
   render($("keyboardBoard"), true);
-  if ($("indicatorBoard")) render($("indicatorBoard"), false);
+  if ($("indicatorBoard")) render($("indicatorBoard"), false, true);
   $("keyboardBoard").addEventListener("click", (e) => {
     const key = e.target.closest(".key");
     if (key) {
       $("keyboardBoard").querySelectorAll(".key").forEach((item) => {
         item.tabIndex = item === key ? 0 : -1;
       });
-      onSelect?.(key.dataset.code);
+      onSelect?.(key.dataset.code, { extend: e.shiftKey || e.metaKey });
     }
   });
-  $("keyboardBoard").addEventListener("keydown", (event) => {
+  const arrowNavigation = (root, select) => root.addEventListener("keydown", (event) => {
     const key = event.target.closest(".key");
     if (!key || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
       return;
@@ -160,14 +191,14 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
     const col = Number(key.dataset.col);
     let next = null;
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      const keys = [...$("keyboardBoard").children[row].querySelectorAll(".key")];
+      const keys = [...root.children[row].querySelectorAll(".key")];
       const delta = event.key === "ArrowLeft" ? -1 : 1;
       next = keys[(col + delta + keys.length) % keys.length];
     } else {
       const nextRow = Math.max(0, Math.min(ROWS.length - 1, row + (
         event.key === "ArrowUp" ? -1 : 1
       )));
-      const targetKeys = [...$("keyboardBoard").children[nextRow].querySelectorAll(".key")];
+      const targetKeys = [...root.children[nextRow].querySelectorAll(".key")];
       next = targetKeys[Math.min(targetKeys.length - 1, Math.round(
         col / Math.max(1, Number(key.dataset.cols) - 1) *
           Math.max(1, targetKeys.length - 1),
@@ -178,10 +209,13 @@ export function createBoard({ state, onSelect, onPaint } = {}) {
     key.tabIndex = -1;
     next.tabIndex = 0;
     next.focus();
-    onSelect?.(next.dataset.code);
+    if (select) onSelect?.(next.dataset.code);
   });
-  new ResizeObserver(scheduleScale).observe(
-    $("keyboardBoard").closest(".board-wrap"),
+  arrowNavigation($("keyboardBoard"), true);
+  if ($("indicatorBoard")) arrowNavigation($("indicatorBoard"), false);
+  const resize = new ResizeObserver(scheduleScale);
+  document.querySelectorAll(".board").forEach((root) =>
+    resize.observe(root.closest(".board-wrap") || root.parentElement)
   );
   scaleAll();
   return { paint, scheduleScale };

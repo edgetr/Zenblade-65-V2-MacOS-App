@@ -24,16 +24,31 @@ export class DeviceOperationGate {
 }
 
 export function buildActuationMatrix(state, keyCount, indexForCode) {
-  const pressValues = Array(keyCount).fill(state.actuation.press);
-  const releaseValues = Array(keyCount).fill(state.actuation.release);
+  const global = state.actuation;
+  const pressValues = Array(keyCount).fill(global.press);
+  const releaseValues = Array(keyCount).fill(global.release);
+  const rapidTriggerValues = Array(keyCount).fill(global.rapidTrigger !== false);
+  const continuousValues = Array(keyCount).fill(
+    global.continuousRapidTrigger === true,
+  );
   for (const [code, value] of Object.entries(state.keyOverrides)) {
     const index = indexForCode(code);
     if (index != null) {
       pressValues[index] = value.press;
       releaseValues[index] = value.release;
+      if (typeof value.rapidTrigger === "boolean") {
+        rapidTriggerValues[index] = value.rapidTrigger;
+      }
+      if (typeof value.continuousRapidTrigger === "boolean") {
+        continuousValues[index] = value.continuousRapidTrigger;
+      }
     }
   }
-  return { pressValues, releaseValues };
+  // Continuous mode only applies on keys that use Rapid Trigger.
+  continuousValues.forEach((on, index) => {
+    continuousValues[index] = on && rapidTriggerValues[index];
+  });
+  return { pressValues, releaseValues, rapidTriggerValues, continuousValues };
 }
 
 export function profileApplyComplete(result) {

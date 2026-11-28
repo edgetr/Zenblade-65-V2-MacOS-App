@@ -11,7 +11,8 @@
 }
 
 .advanced-status.is-error,
-.advanced-note.is-warning {
+.advanced-note.is-warning,
+.advanced-note.is-error {
   color: var(--danger);
 }
 
@@ -156,4 +157,14 @@
   .advanced-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.picker-wrap {
+  max-width: 760px;
+  margin: 0 0 14px;
+}
+
+.board--picker .key.is-selected {
+  background: rgba(var(--accent-rgb), 0.22);
+  color: var(--fg);
 }

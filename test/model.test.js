@@ -486,10 +486,11 @@ test("actuation is normalized at the model boundary before persistence", () => {
     press: 1,
     release: 40,
     rapidTrigger: true,
+    continuousRapidTrigger: false,
   });
   assert.deepEqual(
     normalizeActuation({ press: "x", release: 12, rapidTrigger: false }),
-    { press: 15, release: 12, rapidTrigger: false },
+    { press: 15, release: 12, rapidTrigger: false, continuousRapidTrigger: false },
   );
   model.setOverride("KeyA", { press: -4, release: 80 });
   assert.deepEqual(model.state.keyOverrides.KeyA, { press: 1, release: 40 });
@@ -814,18 +815,18 @@ test("keyboard-first navigation uses one board tab stop and app shortcuts", () =
   );
   assert.match(
     boardSource,
-    /interactive && rowIndex === 0 && col === 0 \? 0 : -1/,
+    /clickable && rowIndex === 0 && col === 0 \? 0 : -1/,
   );
   assert.match(boardSource, /"ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"/);
   assert.match(bootstrapSource, /\^\[1-6\]\$/);
-  assert.match(bootstrapSource, /command && event\.key === "Enter"/);
+  assert.match(bootstrapSource, /command && event\.key === "Enter" && event\.target\?\.id !== "typingTest"/);
   for (const [index, panel] of [
     "keyboard", "lighting", "actuation", "profiles", "advanced", "system",
   ].entries()) {
     assert.match(menuSource, new RegExp(`"CmdOrCtrl\\+${index + 1}", "${panel}"`));
   }
   assert.match(shellSource, /onNavigate: subscribe\("app:navigate"/);
-  assert.match(bootstrapSource, /onNavigate\?\.\(\(panel\) => navigate\(panel\)\)/);
+  assert.match(bootstrapSource, /onNavigate\?\.\(\(panel\) => \{\n    if \(!editorOpen\(\)\) navigate\(panel\);/);
 });
 
 test("logical keys round-trip through the Zenblade 8 by 9 matrix", () => {

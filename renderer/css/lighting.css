@@ -12,6 +12,47 @@
   color: var(--fg-dim);
 }
 
+.color-hex {
+  width: 12ch;
+  min-height: 34px;
+  padding: 0 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+}
+
+.color-hex.is-invalid {
+  border-color: var(--danger);
+}
+
+.color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.color-preset {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: var(--preset);
+  cursor: pointer;
+}
+
+.color-preset:hover,
+.color-preset:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.7);
+  outline-offset: 2px;
+}
+
+.color-preset[aria-pressed="true"] {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
 .color-unavailable {
   margin: 4px 0 0;
   color: var(--fg-mute);

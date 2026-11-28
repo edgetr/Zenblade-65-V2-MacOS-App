@@ -8,6 +8,7 @@ use tauri::menu::{
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, Wry};
 
+use crate::audio::AudioAction;
 use crate::{main_window, send_to_renderer, show_main_window, AppState};
 
 const TRAY_ID: &str = "zenblade";
@@ -16,7 +17,7 @@ const TRAY_ICON: &[u8] = include_bytes!("../icons/tray-template.png");
 /// (menu id, label, accelerator, renderer panel) for the View menu.
 pub const PANELS: [(&str, &str, &str, &str); 6] = [
     ("view-keyboard", "Keyboard", "CmdOrCtrl+1", "keyboard"),
-    ("view-lighting", "Lights", "CmdOrCtrl+2", "lighting"),
+    ("view-lighting", "Lighting", "CmdOrCtrl+2", "lighting"),
     ("view-actuation", "Feel", "CmdOrCtrl+3", "actuation"),
     ("view-profiles", "Profiles", "CmdOrCtrl+4", "profiles"),
     ("view-advanced", "Advanced", "CmdOrCtrl+5", "advanced"),
@@ -130,6 +131,29 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
         "tray-lights" => send_to_renderer(app, "app:toggleLights", ()),
         "tray-automation" => send_to_renderer(app, "app:toggleAutomation", ()),
         "tray-open" => show_main_window(app, None),
+        "tray-mic" => crate::commands::run_audio_action(app, AudioAction {
+            action: "microphone-toggle".into(),
+            input_uid: String::new(),
+            output_uid: String::new(),
+        }),
+        "tray-meeting" => {
+            let meeting = app.state::<AppState>().desktop.lock().unwrap_or_else(|e| e.into_inner()).meeting.clone();
+            if let Some((input_uid, output_uid)) = meeting {
+                crate::commands::run_audio_action(app, AudioAction {
+                    action: "meeting-mode".into(),
+                    input_uid,
+                    output_uid,
+                });
+            }
+        }
+        "tray-login" => {
+            let result = crate::login_item::set(!crate::login_item::enabled());
+            match result {
+                Ok(enabled) => send_to_renderer(app, "app:loginItem", enabled),
+                Err(message) => send_to_renderer(app, "app:systemActionError", message),
+            }
+            refresh_tray(app);
+        }
         "check-updates" | "tray-check-updates" => {
             tauri::async_runtime::spawn(crate::updater::check(app.clone(), true));
         }
@@ -144,8 +168,9 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<(Menu<Wry>, String)> {
         .item(&MenuItemBuilder::with_id("tray-status", status).enabled(false).build(app)?)
         .separator();
     for profile in 0..3 {
+        let name = state.profile_names.get(profile).cloned().unwrap_or_else(|| format!("Profile {}", profile + 1));
         builder = builder.item(
-            &CheckMenuItemBuilder::with_id(format!("tray-profile-{profile}"), format!("Profile {}", profile + 1))
+            &CheckMenuItemBuilder::with_id(format!("tray-profile-{profile}"), name)
                 .checked(state.profile == profile)
                 .build(app)?,
         );
@@ -159,14 +184,27 @@ fn tray_menu(app: &AppHandle) -> tauri::Result<(Menu<Wry>, String)> {
                 .build(app)?,
         )
         .separator()
+        .item(&MenuItemBuilder::with_id("tray-mic", "Mute or Unmute Microphone").build(app)?)
+        .item(
+            &MenuItemBuilder::with_id("tray-meeting", "Start Meeting Setup")
+                .enabled(state.meeting.is_some())
+                .build(app)?,
+        )
+        .separator()
         .item(&MenuItemBuilder::with_id("tray-reconnect", "Reconnect").build(app)?)
         .item(&MenuItemBuilder::with_id("tray-open", "Open Zenblade").build(app)?)
         .item(&MenuItemBuilder::with_id("tray-check-updates", "Check for Updates…").build(app)?)
+        .item(
+            &CheckMenuItemBuilder::with_id("tray-login", "Open at Login")
+                .checked(crate::login_item::enabled())
+                .build(app)?,
+        )
         .separator()
         .item(&PredefinedMenuItem::quit(app, Some("Quit Zenblade"))?)
         .build()?;
     let tooltip = if state.connected {
-        format!("Zenblade · Profile {}", state.profile + 1)
+        let name = state.profile_names.get(state.profile).cloned().unwrap_or_default();
+        format!("Zenblade · {name}")
     } else {
         "Zenblade · Not connected".to_string()
     };

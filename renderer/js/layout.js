@@ -70,9 +70,9 @@ export const ROWS = [
     { code: "LGUI", label: "cmd", w: 1.25 },
     { code: "LALT", label: "opt", w: 1.25 },
     { code: "SPC", label: "", w: 6.25 },
-    { code: "RALT", label: "opt", w: 1.25 },
+    { code: "RALT", label: "opt", w: 1 },
     { code: "FN", label: "fn", w: 1 },
-    { code: "RGUI", label: "cmd", w: 1.25 },
+    { code: "RGUI", label: "cmd", w: 1 },
     { code: "LEFT", label: "←", w: 1 },
     { code: "DOWN", label: "↓", w: 1 },
     { code: "RGHT", label: "→", w: 1 },
@@ -175,3 +175,41 @@ export const LAYOUT_KEY_COUNT = Object.keys(CODE_TO_MATRIX_INDEX).length;
     throw new Error("CODE_TO_MATRIX_INDEX has duplicate matrix indices");
   }
 })();
+
+const KEY_NAMES = Object.freeze({
+  ESC: "Escape",
+  MINUS: "Minus",
+  EQUAL: "Equals",
+  BSPC: "Backspace",
+  HOME: "Home",
+  TAB: "Tab",
+  LBRC: "Left Bracket",
+  RBRC: "Right Bracket",
+  BSLS: "Backslash",
+  PGUP: "Page Up",
+  CAPS: "Caps Lock",
+  SCLN: "Semicolon",
+  QUOT: "Quote",
+  ENT: "Return",
+  PGDN: "Page Down",
+  LSFT: "Left Shift",
+  COMM: "Comma",
+  DOT: "Period",
+  SLSH: "Slash",
+  RSFT: "Right Shift",
+  UP: "Up Arrow",
+  END: "End",
+  LCTL: "Left Control",
+  LGUI: "Left Command",
+  LALT: "Left Option",
+  SPC: "Space",
+  RALT: "Right Option",
+  FN: "Fn",
+  RGUI: "Right Command",
+  LEFT: "Left Arrow",
+  DOWN: "Down Arrow",
+  RGHT: "Right Arrow",
+});
+
+// Human-readable key name for titles, menus and screen readers.
+export const keyName = (code) => KEY_NAMES[code] || code;

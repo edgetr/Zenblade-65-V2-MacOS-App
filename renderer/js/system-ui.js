@@ -8,7 +8,7 @@ import {
   hostShortcutMappings,
   keyActionTriggerLabel,
 } from "./system-data.js";
-import { CODE_TO_MATRIX_INDEX, ROWS } from "./layout.js";
+import { CODE_TO_MATRIX_INDEX, ROWS, keyName } from "./layout.js";
 import { $ } from "./dom.js";
 
 const option = (value, label) => {
@@ -32,6 +32,7 @@ export function createSystemUi({
   gate,
   board,
   toast,
+  onDesktopChange,
 }) {
   let context = {
     audio: { devices: [], micMuted: false, canMuteInput: false },
@@ -49,16 +50,27 @@ export function createSystemUi({
   let renderedProfile = state.profile;
 
   const systemDraft = () => structuredClone(state.system);
+  // Process scans fork /bin/ps, so only ask for rules that can light keys.
   const processDetectors = () =>
-    state.system.indicators.rules
-      .filter((rule) => rule.source === "process" && rule.match)
-      .map((rule) => ({ id: rule.id, match: rule.match }));
+    state.system.indicators.enabled
+      ? state.system.indicators.rules
+        .filter((rule) => rule.enabled && rule.source === "process" && rule.match)
+        .map((rule) => ({ id: rule.id, match: rule.match }))
+      : [];
+  // Audio and process status only feed on-screen views: the mic pill and
+  // device lists on System, and the status map painted on the in-app boards.
+  // Stop polling while the window is hidden or nothing shows them.
+  const contextNeeded = () =>
+    document.visibilityState === "visible" &&
+    (state.system.indicators.enabled || !$("panel-system").hidden);
 
   function setSystem(partial) {
     model.setSystem(partial);
     configureShortcuts();
     sync();
     refreshContext();
+    // Meeting devices feed the menu-bar menu.
+    onDesktopChange?.();
   }
 
   async function configureShortcuts() {
@@ -109,7 +121,7 @@ export function createSystemUi({
     }
     await configureShortcuts();
     mappingStatus = state.system.enabled
-      ? `Profile ${state.profile + 1} controls are synced.`
+      ? `${model.labelFor(state.profile)} controls are synced.`
       : "Factory key functions restored.";
     syncMappingStatus();
     return { systemOk: true };
@@ -158,7 +170,15 @@ export function createSystemUi({
       : "";
   }
 
+  // sync() runs on every chrome update (including slider drags elsewhere), so
+  // rebuild these lists only when their data changed.
+  let actionsStamp = "";
+  let indicatorsStamp = "";
+
   function renderActions() {
+    const stamp = JSON.stringify(state.system.keyActions);
+    if (stamp === actionsStamp) return;
+    actionsStamp = stamp;
     const list = $("systemActionList");
     list.innerHTML = "";
     state.system.keyActions.forEach((item) => {
@@ -204,6 +224,12 @@ export function createSystemUi({
   }
 
   function renderIndicators() {
+    const stamp = JSON.stringify(state.system.indicators.rules);
+    if (stamp === indicatorsStamp) {
+      updateIndicatorStates();
+      return;
+    }
+    indicatorsStamp = stamp;
     const list = $("indicatorRuleList");
     list.innerHTML = "";
     state.system.indicators.rules.forEach((rule) => {
@@ -292,13 +318,18 @@ export function createSystemUi({
     paintIndicators();
   }
 
+  let contextBusy = false;
   function scheduleContextRefresh() {
     clearTimeout(contextTimer);
+    contextTimer = 0;
+    if (!contextNeeded()) return;
     contextTimer = setTimeout(refreshContext, 1500);
   }
 
   async function refreshContext() {
     clearTimeout(contextTimer);
+    contextTimer = 0;
+    contextBusy = true;
     const generation = ++contextGeneration;
     try {
       const next = await window.zenShell?.getSystemContext?.(processDetectors());
@@ -314,7 +345,10 @@ export function createSystemUi({
       $("systemMicState").textContent = "System bridge unavailable";
       $("systemMicState").className = "mic-pill";
     } finally {
-      if (generation === contextGeneration) scheduleContextRefresh();
+      if (generation === contextGeneration) {
+        contextBusy = false;
+        scheduleContextRefresh();
+      }
     }
   }
 
@@ -335,6 +369,8 @@ export function createSystemUi({
     paintIndicators();
     syncMappingStatus();
     configureShortcuts();
+    // A profile switch can turn on status indicators while polling is idle.
+    if (!contextBusy && !contextTimer && contextNeeded()) refreshContext();
   }
 
   function openActionEditor() {
@@ -387,6 +423,9 @@ export function createSystemUi({
     });
     setSystem({ keyActions: next.keyActions });
     closeActionEditor();
+    // Match Remove and the Enabled switch: changes reach the keyboard at once.
+    // While controls are paused there is nothing new to write.
+    if (state.connected && state.system.enabled) syncMappings();
   }
 
   function syncActionEditor() {
@@ -435,7 +474,7 @@ export function createSystemUi({
     $("indicatorRowField").hidden = !row;
   }
 
-  function openIndicatorEditor(rule = null) {
+  function openIndicatorEditor(rule = null, keyCode = null) {
     indicatorEditorReturn = document.activeElement;
     editingIndicatorId = rule?.id || null;
     $("indicatorEditorTitle").textContent = rule ? "Edit indicator" : "Add indicator";
@@ -443,7 +482,7 @@ export function createSystemUi({
     $("indicatorName").value = rule?.name || "";
     $("indicatorMatch").value = rule?.match || "";
     $("indicatorTargetType").value = rule?.targetType || "key";
-    $("indicatorKey").value = rule?.keyCode || "M";
+    $("indicatorKey").value = rule?.keyCode || keyCode || "M";
     $("indicatorRow").value = String(rule?.row || 0);
     $("indicatorColor").value = rule?.color || "#7c5cff";
     $("indicatorPriority").value = String(rule?.priority ?? 50);
@@ -484,10 +523,16 @@ export function createSystemUi({
       color: $("indicatorColor").value,
       priority: Number($("indicatorPriority").value),
     };
-    const rules = state.system.indicators.rules.filter(
-      (value) => value.id !== editingIndicatorId,
+    const existing = state.system.indicators.rules.find(
+      (value) => value.id === editingIndicatorId,
     );
-    rules.push(rule);
+    if (existing) rule.enabled = existing.enabled;
+    // Edits keep the rule's place in the list; new rules go to the end.
+    const rules = existing
+      ? state.system.indicators.rules.map((value) =>
+        value.id === existing.id ? rule : value
+      )
+      : [...state.system.indicators.rules, rule];
     setSystem({
       indicators: {
         enabled: true,
@@ -497,7 +542,7 @@ export function createSystemUi({
     closeIndicatorEditor();
   }
 
-  ROWS.flat().forEach((key) => $("indicatorKey").append(option(key.code, key.label || key.code)));
+  ROWS.flat().forEach((key) => $("indicatorKey").append(option(key.code, keyName(key.code))));
 
   $("systemEnabled").addEventListener("change", () => {
     setSystem({ enabled: $("systemEnabled").checked });
@@ -556,6 +601,15 @@ export function createSystemUi({
     input.addEventListener("change", syncActionEditor)
   );
   $("btnAddIndicator").addEventListener("click", () => openIndicatorEditor());
+  // Clicking a key on the status map edits its indicator, or adds one there.
+  $("indicatorBoard").addEventListener("click", (event) => {
+    const code = event.target.closest(".key")?.dataset.code;
+    if (!code) return;
+    const rule = state.system.indicators.rules.find((item) =>
+      item.targetType === "key" && item.keyCode === code
+    );
+    openIndicatorEditor(rule || null, code);
+  });
   $("btnCancelIndicator").addEventListener("click", closeIndicatorEditor);
   $("btnSaveIndicator").addEventListener("click", saveIndicator);
   $("indicatorSource").addEventListener("change", syncIndicatorEditorVisibility);
@@ -620,6 +674,29 @@ export function createSystemUi({
     syncContext();
   });
   window.zenShell?.onSystemActionError?.((message) => toast(message, "error"));
+
+  const setLoginSwitch = (enabled) => {
+    $("loginItemEnabled").checked = enabled === true;
+  };
+  window.zenShell?.getLoginItem?.().then(setLoginSwitch).catch(() => {
+    $("loginItemEnabled").disabled = true;
+  });
+  window.zenShell?.onLoginItem?.(setLoginSwitch);
+  $("loginItemEnabled").addEventListener("change", async (event) => {
+    const wanted = event.target.checked;
+    try {
+      setLoginSwitch(await window.zenShell?.setLoginItem?.(wanted));
+      toast(wanted ? "Zenblade will open at login" : "Zenblade won’t open at login", "ok");
+    } catch (error) {
+      setLoginSwitch(!wanted);
+      toast(error?.message || String(error), "error");
+    }
+  });
+  const resumeContext = () => {
+    if (contextNeeded()) refreshContext();
+  };
+  document.addEventListener("visibilitychange", resumeContext);
+  document.addEventListener("zen:panel", resumeContext);
 
   refreshContext();
   sync();
